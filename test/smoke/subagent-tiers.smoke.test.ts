@@ -60,9 +60,9 @@ function writeOverrides(body: Record<string, unknown>): void {
   );
 }
 
-/** Runs `opencode debug agent <name>` in the fixture and parses the JSON. */
+/** Runs `opencode debug agents` in the fixture (v2 CLI) and picks one agent. */
 function debugAgent(name: string): Record<string, any> {
-  const result = spawnSync("opencode", ["debug", "agent", name], {
+  const result = spawnSync("opencode", ["debug", "agents"], {
     cwd: projectDir,
     env: { ...process.env, HOME: homeDir },
     encoding: "utf8",
@@ -70,10 +70,17 @@ function debugAgent(name: string): Record<string, any> {
   });
   if (result.status !== 0) {
     throw new Error(
-      `opencode debug agent ${name} failed (${result.status}):\n${result.stderr}`,
+      `opencode debug agents failed (${result.status}):\n${result.stderr}`,
     );
   }
-  return JSON.parse(result.stdout);
+  const all = JSON.parse(result.stdout) as Array<Record<string, any>>;
+  const found = all.find((a) => a.id === name);
+  if (!found) {
+    throw new Error(
+      `opencode debug agents did not include agent "${name}": ${JSON.stringify(all.map((a) => a.id))}`,
+    );
+  }
+  return found;
 }
 
 beforeAll(() => {
@@ -103,7 +110,7 @@ beforeAll(() => {
   fs.writeFileSync(
     path.join(projectDir, "opencode.json"),
     JSON.stringify(
-      { $schema: "https://opencode.ai/config.json", plugin: [REPO_ROOT] },
+      { $schema: "https://opencode.ai/config.json", plugins: [REPO_ROOT] },
       null,
       2,
     ),

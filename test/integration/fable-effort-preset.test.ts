@@ -41,7 +41,7 @@ test("applies fable-effort preset options through config hook", async () => {
     delete process.env.MODEL_ROUTER_ENFORCE;
     process.env.MODEL_ROUTER_VERIFIED_DELEGATE = "1";
 
-    const { default: ModelRouterPlugin } = await import("../../src/index");
+    const { ModelRouterPluginV1: ModelRouterPlugin } = await import("../../src/index");
     const { invalidateConfigCache, writeState } = await import("../../src/router/config");
     invalidateConfigCache();
     writeState({ activePreset: "fable-effort" });
@@ -88,7 +88,7 @@ test("registers an effort key only for the tiers that set one", async () => {
     delete process.env.MODEL_ROUTER_ENFORCE;
     process.env.MODEL_ROUTER_VERIFIED_DELEGATE = "1";
 
-    const { default: ModelRouterPlugin } = await import("../../src/index");
+    const { ModelRouterPluginV1: ModelRouterPlugin } = await import("../../src/index");
     const { invalidateConfigCache, writeState } = await import("../../src/router/config");
     invalidateConfigCache();
     writeState({ activePreset: "anthropic" });

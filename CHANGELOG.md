@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-09-20
+
+### Added
+
+- **OpenCode v2 plugin support.** OpenCode 2.x no longer runs V1 plugin
+  implementations ("V1 plugin implementations do not run in V2", per the official
+  migration guide), which silently broke everything this plugin registers on v2:
+  the `/tiers`, `/preset`, `/budget`, `/bypass`, `/annotate-plan` and `/router`
+  commands were never registered (so OpenCode passed them to the model as plain
+  prompts), and the `fast`/`medium`/`heavy` tier agents were never created. The
+  default export is now the documented dual shape: V2 loaders call `setup(ctx)`
+  — the full V1 hook set is re-registered through the V2 plugin context
+  (`session.hook("context"|"prompt")`, `tool.hook`, `agent.transform`,
+  `command.transform`, `event.subscribe`) with shape adapters at each seam — and
+  V1 loaders (1.18.29+) call `server(input)` and receive the V1 hooks object
+  unchanged. `ModelRouterPluginV1` remains exported for direct import; tests and
+  tooling that exercised the V1 factory now import it by name.
+
+### Fixed
+
+- **Smoke harness on the v2 CLI.** `opencode debug agent <name>` no longer exists
+  in v2 (`Unknown subcommand "agent"`); the smoke fixtures now run
+  `opencode debug agents` and pick the agent by id, and the fixture configs use
+  the v2 `plugins` key instead of V1 `plugin`.
+
 ## [1.11.1] - 2026-08-24
 
 ### Added

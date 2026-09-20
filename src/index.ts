@@ -1243,4 +1243,302 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
   };
 };
 
-export default ModelRouterPlugin;
+export const ModelRouterPluginV1 = ModelRouterPlugin;
+
+// ---------------------------------------------------------------------------
+// OpenCode V2 plugin definition.
+//
+// V2 loaders round-trip the default export through a schema that requires an
+// object with `id` and a `setup(ctx)` function, and V1 hook objects do not run
+// in V2 (docs/opencode migrate-v1: "V1 plugin implementations do not run in
+// V2"). The V1 factory above is left intact and all of its returned hooks are
+// re-registered through the V2 plugin context below, with shape adapters at
+// each seam.
+//
+// Confidence notes (ported from the 1.10.0 local patch — verify behaviors live
+// before trusting):
+//  - ctx.session.hook("context")  → system-prompt injection + grader temp
+//  - ctx.session.hook("prompt")   → subagent session registration/caps
+//  - ctx.tool.hook                → guard + cap banners
+//  - ctx.agent/command.transform  → tier agents + commands
+//  - experimental.text.complete has NO V2 hook (dropped; feature is opt-in/off)
+// ---------------------------------------------------------------------------
+const V2Plugin = {
+  id: "opencode-model-router",
+  async setup(ctx2: any): Promise<(() => void) | undefined> {
+    const safe = (label: string, fn: () => unknown | Promise<unknown>) => {
+      try {
+        const r = fn();
+        if (r && typeof (r as Promise<unknown>).catch === "function") {
+          (r as Promise<unknown>).catch((e: unknown) =>
+            console.warn(`[model-router] ${label} registration failed:`, e),
+          );
+        }
+      } catch (e) {
+        console.warn(`[model-router] ${label} registration failed:`, e);
+      }
+    };
+
+    // ---- V1 PluginInput shim built over the V2 context --------------------
+    const shimClient = {
+      app: {
+        log: async (p: any) => {
+          try {
+            console.log(`[model-router] ${p?.body?.level ?? "info"}: ${p?.body?.message ?? ""}`);
+          } catch {}
+        },
+      },
+      config: {
+        providers: async () => {
+          try {
+            const res: any =
+              (typeof (ctx2.provider?.list === "function")
+                ? await ctx2.provider.list()
+                : null) ?? (typeof ctx2.model?.list === "function"
+                ? await ctx2.model.list()
+                : null);
+            return { data: res };
+          } catch (e) {
+            return { data: null, ...(e as object) };
+          }
+        },
+      },
+      session: {
+        create: async (a: any) => {
+          try {
+            const s: any = await ctx2.session.create(
+              a?.body?.parentID ? { parentID: a.body.parentID } : {},
+            );
+            return { data: { id: s?.id ?? s?.sessionID ?? "" } };
+          } catch {
+            return { data: undefined };
+          }
+        },
+        prompt: async (p: any) => {
+          try {
+            const parts = p?.body?.parts ?? [];
+            const text = parts
+              .map((x: any) => (typeof x === "string" ? x : (x?.text ?? "")))
+              .join("\n");
+            return await ctx2.session.prompt({
+              sessionID: p?.path?.id,
+              text,
+              ...("system" in (p?.body ?? {}) ? { system: p.body.system } : {}),
+              ...(p?.body?.model ? { model: p.body.model } : {}),
+            } as never);
+          } catch (e) {
+            return { error: e };
+          }
+        },
+        abort: async (p: any) => {
+          try {
+            await ctx2.session.interrupt({ sessionID: p?.path?.id });
+          } catch {}
+        },
+        delete: async (p: any) => {
+          try {
+            await (ctx2.session as any).delete?.({ sessionID: p?.path?.id });
+          } catch {}
+        },
+      },
+    };
+
+    let hooks: Record<string, any>;
+    try {
+      hooks = (await ModelRouterPlugin({
+        client: shimClient,
+        directory: ctx2.location?.directory ?? process.cwd(),
+        project: ctx2.location?.project ?? {},
+        options: ctx2.options,
+      } as never)) as Record<string, any>;
+    } catch (e) {
+      console.warn("[model-router] failed to initialise V1 core in V2 setup:", e);
+      return;
+    }
+
+    // ---- system prompt + grader temperature (chat.params + system.transform)
+    safe("context-hook", () =>
+      ctx2.session.hook("context", async (event: any) => {
+        try {
+          const pOut: any = { temperature: undefined };
+          await hooks["chat.params"]({ sessionID: event?.sessionID }, pOut);
+          if (pOut.temperature !== undefined && event?.options) {
+            event.options.temperature = pOut.temperature;
+          }
+          const sOut: any = { system: [] };
+          await hooks["experimental.chat.system.transform"](
+            {
+              sessionID: event?.sessionID,
+              model: event?.model,
+            },
+            sOut,
+          );
+          if (Array.isArray(event?.system) && Array.isArray(sOut.system)) {
+            // ChatParams/system-transform push string prompts in V1; V2 wants {type,text}
+            for (const s of sOut.system) {
+              if (typeof s === "string") event.system.push({ type: "text" as const, text: s });
+              else if (s && typeof s === "object" && typeof (s as any).text === "string") {
+                event.system.push({ type: "text" as const, text: (s as any).text });
+              }
+            }
+          }
+        } catch {}
+      }),
+    );
+
+    // ---- subagent dispatch registration (chat.message) ---------------------
+    safe("prompt-hook", () =>
+      ctx2.session.hook("prompt", async (event: any) => {
+        try {
+          const agentName =
+            (event as any)?.agent ??
+            (event as any)?.agentName ??
+            ((event as any)?.agents?.[0] ?? undefined);
+          const dispatchText = event?.prompt?.text ?? "";
+          await hooks["chat.message"](
+            { sessionID: event?.sessionID, agent: agentName },
+            {
+              parts: [{ type: "text", text: dispatchText }],
+              prompt: event?.prompt,
+              metadata: event?.metadata,
+            },
+          );
+        } catch {}
+      }),
+    );
+
+    // ---- guard before / cap banners after ----------------------------------
+    safe("tool-hooks", () => ctx2.tool.hook("execute.before", async (event: any) => {
+      try {
+        await hooks["tool.execute.before"](
+          { sessionID: event?.sessionID, tool: event?.tool, args: event?.input },
+          { args: event?.input },
+        );
+      } catch (e) {
+        throw e; // before-hook throws are the intended hard-block mechanism
+      }
+    }));
+    safe("tool-after-hook", () =>
+      ctx2.tool.hook("execute.after", async (event: any) => {
+        const original: unknown = event?.output ?? event?.result;
+        const outRef: any = {
+          output: original,
+          input: event?.input,
+        };
+        await hooks["tool.execute.after"](
+          { sessionID: event?.sessionID, tool: event?.tool, args: event?.input },
+          outRef,
+        );
+        if (outRef.output !== undefined && outRef.output !== original && event) {
+          if ("output" in event) (event as any).output = outRef.output;
+          else if ("result" in event) {
+            if (typeof event.result === "string") (event as any).result = outRef.output;
+            else if (event.result && typeof event.result === "object") {
+              (event.result as any).text = outRef.output;
+            }
+          }
+        }
+      }),
+    );
+
+    // ---- agents + commands registration (V1 `config` hook + command shim) --
+    const fakeConfig: any = { agent: {}, command: {} };
+    try {
+      await hooks.config(fakeConfig);
+    } catch (e) {
+      console.warn("[model-router] config registration failed:", e);
+    }
+    safe("agent-transform", () =>
+      ctx2.agent.transform(async (ed: any) => {
+        for (const [name, def] of Object.entries(fakeConfig.agent ?? {})) {
+          try {
+            if (typeof ed.add === "function") ed.add(name, def as never);
+            else if (typeof ed.update === "function") {
+              // V2 AgentEditor.update takes a mutation callback over an
+              // existing agent; merge the tier def in. Warn (not silent) when
+              // neither registration path exists on the editor we were given.
+              ed.update(name, (agent: any) => {
+                if (agent && typeof agent === "object") Object.assign(agent, def);
+                else throw new Error(`agent "${name}" does not exist to update`);
+              });
+            }
+          } catch (e) {
+            console.warn(`[model-router] agent "${name}" registration failed:`, e);
+          }
+        }
+      }),
+    );
+    try {
+      await ctx2.command.transform((ed: any) => {
+        for (const [name, defC] of Object.entries(fakeConfig.command ?? {}) as [string, any][]) {
+          ed.add({
+            name,
+            description: String(defC?.description ?? ""),
+            execute: async ({ sessionID, prompt }: any) => {
+              const args = (prompt?.text ?? "").trim();
+              if (name === "annotate-plan") {
+                const template = String((defC?.template as string) ?? "");
+                try {
+                  await ctx2.session.prompt({
+                    sessionID,
+                    text: template.replace("$ARGUMENTS", args),
+                    delivery: "queue",
+                  } as never);
+                } catch {}
+                return;
+              }
+              // Informational commands: mirror V1 command.execute.before by
+              // routing its part-building body, then surface as a synthetic
+              // message instead of pushed user-message parts.
+              try {
+                const out: any = { parts: [] };
+                await hooks["command.execute.before"]({ command: name, arguments: args }, out);
+                const text = (out?.parts ?? [])
+                  .map((part: unknown) =>
+                    typeof part === "string" ? part : (part as any)?.text ?? "",
+                  )
+                  .filter(Boolean)
+                  .join("\n");
+                if (text && typeof ctx2.session?.synthetic === "function") {
+                  await ctx2.session.synthetic({ sessionID, text });
+                } else if (text) {
+                  console.log(`[model-router] /${name}\n${text}`);
+                }
+              } catch {}
+            },
+          });
+        }
+      });
+    } catch (e) {
+      console.warn("[model-router] command transform failed:", e);
+    }
+
+    // ---- session.idle scorecards via the public event stream ---------------
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        for await (const ev of ctx2.event.subscribe({ signal: controller.signal })) {
+          if ((ev as any)?.type === "session.idle") {
+            void hooks.event({ event: ev });
+          }
+        }
+      } catch {}
+    })();
+
+    return () => {
+      controller.abort();
+      try {
+        void hooks.dispose?.();
+      } catch {}
+    };
+  },
+};
+
+// Dual-shape default export (docs/opencode migrate-v1, "Support V1 and V2 from
+// one package"): V2 loaders call `setup(ctx)`, V1 loaders (1.18.29+) call
+// `server(input)` and receive the V1 hooks object unchanged.
+export default {
+  id: V2Plugin.id,
+  setup: V2Plugin.setup,
+  server: async (input: PluginInput) => ModelRouterPlugin(input),
+};

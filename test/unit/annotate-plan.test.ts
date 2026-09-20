@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import ModelRouterPlugin from "../../src/index";
+import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
 import { parseAcceptanceBlock } from "../../src/verify/dod";
 import { buildDoDProtocolSection } from "../../src/router/protocol";
 import { loadConfig, invalidateConfigCache } from "../../src/router/config";

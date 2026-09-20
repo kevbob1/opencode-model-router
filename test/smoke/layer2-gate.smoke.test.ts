@@ -168,7 +168,7 @@ d("layer-2 acceptance gate smoke", () => {
       const configPayload = JSON.stringify(
         {
           $schema: "https://opencode.ai/config.json",
-          plugin: [PLUGIN_PATH],
+          plugins: [PLUGIN_PATH],
         },
         null,
         2,

@@ -18,7 +18,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import ModelRouterPlugin from "../../src/index";
+import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache } from "../../src/router/config";
 import {
   DEFAULT_DELEGATE_PROMPT_TIMEOUT_MS,

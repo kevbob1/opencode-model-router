@@ -56,9 +56,9 @@ interface DebugAgentResult {
   stderr: string;
 }
 
-/** Runs `opencode debug agent <name>` in the fixture, returning raw streams. */
+/** Runs `opencode debug agents` in the fixture (v2 CLI: no per-name subcommand). */
 function debugAgent(name: string): DebugAgentResult {
-  const result = spawnSync("opencode", ["debug", "agent", name], {
+  const result = spawnSync("opencode", ["debug", "agents"], {
     cwd: projectDir,
     env: { ...process.env, HOME: homeDir },
     encoding: "utf8",
@@ -122,7 +122,7 @@ beforeAll(() => {
   fs.writeFileSync(
     path.join(projectDir, "opencode.json"),
     JSON.stringify(
-      { $schema: "https://opencode.ai/config.json", plugin: [REPO_ROOT] },
+      { $schema: "https://opencode.ai/config.json", plugins: [REPO_ROOT] },
       null,
       2,
     ),
@@ -145,8 +145,11 @@ d("keyless registration smoke", () => {
 
       expect(result.status).toBe(0);
 
-      const agent = JSON.parse(result.stdout) as Record<string, any>;
-      expect(agent.model).toEqual(OPENAI_MODEL);
+      const agent = (JSON.parse(result.stdout) as Array<Record<string, any>>).find(
+        (a) => a.id === "fast",
+      ) as Record<string, any> | undefined;
+      expect(agent).toBeDefined();
+      expect(agent!.model).toEqual(OPENAI_MODEL);
       // xhigh -> high downgrade: OpenAI has no `xhigh` reasoning effort, so
       // the options builder must clamp it. Seeing `high` here proves the
       // config hook and override resolution ran inside a real opencode.

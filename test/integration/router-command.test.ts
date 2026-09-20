@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-import ModelRouterPlugin from "../../src/index";
+import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
 import { resolveEnforcementMode } from "../../src/router/enforcement";
 import { loadConfig, invalidateConfigCache } from "../../src/router/config";
 import { resetAgentOptionsEffortWarnings } from "../../src/router/agent-options";

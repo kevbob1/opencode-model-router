@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import ModelRouterPlugin from "../../src/index";
+import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache, loadConfig } from "../../src/router/config";
 
 async function captureGraderParams(): Promise<Record<string, unknown>> {

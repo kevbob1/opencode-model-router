@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import ModelRouterPlugin from "../../src/index";
+import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
 
 describe("proportional-downgrade integration", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

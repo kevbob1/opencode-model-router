@@ -161,7 +161,7 @@ beforeAll(async () => {
     JSON.stringify(
       {
         $schema: "https://opencode.ai/config.json",
-        plugin: [REPO_ROOT.replace(/\\/g, "/")],
+        plugins: [REPO_ROOT.replace(/\\/g, "/")],
       },
       null,
       2,

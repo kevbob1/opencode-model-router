@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import ModelRouterPlugin from "../../src/index";
+import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
 import { loadConfig } from "../../src/router/config";
 import { getActiveTiers } from "../../src/router/protocol";
 import { createSessionStore } from "../../src/router/sessions";
