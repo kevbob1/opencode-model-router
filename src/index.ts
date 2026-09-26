@@ -1560,6 +1560,35 @@ const V2Plugin = {
       }),
     );
 
+    // V2 tools are registered through the tool transform. The V1 core still
+    // owns the delegation implementation, but the public registration uses
+    // the native V2 JSON-schema/result contract.
+    const delegateTool = hooks.tool?.delegate;
+    if (delegateTool && typeof ctx2.tool?.transform === "function") {
+      await safe("delegate-tool", () =>
+        ctx2.tool.transform((editor: any) => {
+          editor.add({
+            name: "delegate",
+            description: String(delegateTool.description ?? "Delegate a task to a router tier."),
+            input: {
+              type: "object",
+              properties: {
+                task: { type: "string", description: "The task for the subagent." },
+                tier: { type: "string", enum: ["fast", "medium", "heavy"] },
+                acceptance: { type: "string" },
+                cwd: { type: "string" },
+              },
+              required: ["task"],
+              additionalProperties: false,
+            },
+            execute: async (input: any, toolContext: any) => ({
+              content: await delegateTool.execute(input, { sessionID: toolContext.sessionID }),
+            }),
+          });
+        }),
+      );
+    }
+
     // ---- agents + commands registration (V1 `config` hook + command shim) --
     const fakeConfig: any = { agent: {}, command: {} };
     try {
