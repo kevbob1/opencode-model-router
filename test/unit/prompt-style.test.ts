@@ -203,7 +203,7 @@ describe("goal-oriented prompt contracts", () => {
     expect(GOAL_ORIENTED_TIER_PROMPTS.fast).toContain("never write or edit");
     expect(GOAL_ORIENTED_TIER_PROMPTS.medium).toContain("as any");
     expect(GOAL_ORIENTED_TIER_PROMPTS.medium).toContain("@ts-ignore");
-    expect(GOAL_ORIENTED_TIER_PROMPTS.heavy).toContain("prefer @fast pre-exploration of");
+    expect(GOAL_ORIENTED_TIER_PROMPTS.heavy).toContain("prefer @omr-fast pre-exploration of");
   });
 
   test("goal-oriented prompts avoid prescriptive enumerations", () => {
@@ -222,9 +222,9 @@ describe("goal-oriented prompt contracts", () => {
   // Pins the measured size of the style switch. Update deliberately: a moving
   // delta means one of the two prompt sets changed.
   test.each([
-    ["fast", 2072, 1165],
-    ["medium", 2337, 1530],
-    ["heavy", 2459, 1595],
+    ["fast", 2080, 1173],
+    ["medium", 2357, 1534],
+    ["heavy", 2475, 1607],
   ] as const)(
     "%s prescriptive/goal-oriented character counts are pinned",
     (tier, prescriptiveLength, goalOrientedLength) => {

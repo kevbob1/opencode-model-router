@@ -188,7 +188,7 @@ export function buildForcingNote(
       : "- (no reasons provided)";
   const next =
     escalation?.nextTier
-      ? `NEXT: address the above, then re-run via \`Task(subagent_type="${escalation.nextTier}")\`` +
+      ? `NEXT: address the above, then re-run via \`Task(subagent_type="omr-${escalation.nextTier}")\`` +
         `${escalation.producerTier ? ` (escalated from ${escalation.producerTier})` : ""}; ` +
         `do not treat the prior result as complete.`
       : `NEXT: address the above and re-run the delegation; do not treat the prior result as complete.`;

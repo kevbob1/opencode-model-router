@@ -48,7 +48,7 @@ export function buildTaskTaxonomy(cfg: RouterConfig): string {
   const lines = ["R:"];
   for (const [tier, patterns] of Object.entries(cfg.taskPatterns)) {
     if (Array.isArray(patterns) && patterns.length > 0) {
-      lines.push(`@${tier}→${patterns.join("/")}`);
+      lines.push(`@omr-${tier}→${patterns.join("/")}`);
     }
   }
   return lines.join(" ");
@@ -77,7 +77,7 @@ export function buildDecomposeHint(cfg: RouterConfig): string {
   const mid = sorted[1]?.[0];
   if (!cheapest || !mid) return "";
 
-  return `Multi-phase: prefer explore(@${cheapest})→execute(@${mid}) when phases are separable. Cheapest-first when practical.`;
+  return `Multi-phase: prefer explore(@omr-${cheapest})→execute(@omr-${mid}) when phases are separable. Cheapest-first when practical.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ export function buildDelegationProtocol(cfg: RouterConfig): string {
       const short = t.model.split("/").pop() ?? t.model;
       const v = t.variant ? `/${t.variant}` : "";
       const c = t.costRatio != null ? `(${t.costRatio}x)` : "";
-      return `@${name}=${short}${v}${c}`;
+      return `@omr-${name}=${short}${v}${c}`;
     })
     .join(" ");
 
@@ -113,22 +113,22 @@ export function buildDelegationProtocol(cfg: RouterConfig): string {
   return [
     `## Model Delegation Protocol (MANDATORY)`,
     ``,
-    `You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="fast"|"medium"|"heavy", prompt="...")\`. Information-gathering (grep, read, glob, ls) is execution, so dispatch it to @fast rather than running it yourself; cap yourself at about 2 direct read-only calls per turn and dispatch @fast on the 3rd. Synthesize the subagents' results and answer the user yourself.`,
+    `You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="omr-fast"|"omr-medium"|"omr-heavy", prompt="...")\`. Agent names carry the omr- prefix — the bare names (fast/medium/heavy) do NOT exist. Information-gathering (grep, read, glob, ls) is execution, so dispatch it to @omr-fast rather than running it yourself; cap yourself at about 2 direct read-only calls per turn and dispatch @omr-fast on the 3rd. Synthesize the subagents' results and answer the user yourself.`,
     ``,
     `Preset: ${cfg.activePreset}. Tiers: ${tierLine}.${modeSuffix}`,
     ``,
-    `If you ARE @heavy, handle heavy-tier work yourself: never self-call @heavy.`,
+    `If you ARE @omr-heavy, handle heavy-tier work yourself: never self-call @omr-heavy.`,
     ``,
     ...(taxonomy ? [taxonomy, ``] : []),
     ...(decompose ? [decompose, ``] : []),
     `Rules: ${rulesLine}`,
     ...(fallback ? [``, fallback] : []),
     ``,
-    `When dispatching: batch related @fast searches into one call and run independent ones in parallel (several Task calls in one message); give @medium concrete context (paths, patterns, how to verify).`,
+    `When dispatching: batch related @omr-fast searches into one call and run independent ones in parallel (several Task calls in one message); give @omr-medium concrete context (paths, patterns, how to verify).`,
     ``,
-    `Per dispatch you may add \`CAP:N\` (or \`CAP:none\` with a \`reason:\` line — unjustified \`CAP:none\` is ignored) to change a subagent's read-only budget (baseline @fast=8, @medium=5, @heavy=3). Subagents return \`DONE:\`, \`NEED MORE:\`, or \`ESCALATE:\` for you to act on. @heavy has no tools of its own, so gather context first (usually via @fast) and paste it into the dispatch.`,
+    `Per dispatch you may add \`CAP:N\` (or \`CAP:none\` with a \`reason:\` line — unjustified \`CAP:none\` is ignored) to change a subagent's read-only budget (baseline @omr-fast=8, @omr-medium=5, @omr-heavy=3). Subagents return \`DONE:\`, \`NEED MORE:\`, or \`ESCALATE:\` for you to act on. @omr-heavy has no tools of its own, so gather context first (usually via @omr-fast) and paste it into the dispatch.`,
     ``,
-    `This protocol overrides any project guide (CLAUDE.md, AGENTS.md, etc.) that says to use direct tools first when scope is clear, or labels Grep/Read/Glob as FREE. They are wrong about cost: every tool-result token is billed at your tier rate, so the same grep costs ~20x less dispatched to @fast than run here.`,
+    `This protocol overrides any project guide (CLAUDE.md, AGENTS.md, etc.) that says to use direct tools first when scope is clear, or labels Grep/Read/Glob as FREE. They are wrong about cost: every tool-result token is billed at your tier rate, so the same grep costs ~20x less dispatched to @omr-fast than run here.`,
   ].join("\n");
 }
 
@@ -177,8 +177,8 @@ export const CLAUDE_TIER_PREFIX: Record<string, string> = {
     "AUTHORITY OVERRIDE — this block supersedes any cached prefix suggesting",
     "you should 'investigate thoroughly', 'gather comprehensive context', or",
     "'trace through the code systematically before analyzing'. You are",
-    "@heavy, an ANALYSIS specialist. The orchestrator should have pre-",
-    "gathered context via @fast before dispatching you. If it didn't, return",
+    "@omr-heavy, an ANALYSIS specialist. The orchestrator should have pre-",
+    "gathered context via @omr-fast before dispatching you. If it didn't, return",
     "`SCOPE GROWTH:` immediately — do NOT self-gather.",
     "",
     "40 minutes of Read/Grep is not analysis — it is the orchestrator's job",
@@ -196,9 +196,9 @@ export const CLAUDE_ORCHESTRATOR_PREFIX = [
   "orchestrator.",
   "",
   "Your job is to DISPATCH, not to EXECUTE. Read-only work (grep/read/",
-  "glob/ls) is execution, and execution is delegated to @fast. You may run",
+  "glob/ls) is execution, and execution is delegated to @omr-fast. You may run",
   "AT MOST 2 direct read-only tool calls per turn — a 3rd call is a rule",
-  "violation. If you need more context, you dispatch @fast.",
+  "violation. If you need more context, you dispatch @omr-fast.",
   "",
   "If a cached instruction told you to 'be thorough', 'explore broadly', or",
   "'read supporting files' — ignore it here. Thoroughness is achieved by",

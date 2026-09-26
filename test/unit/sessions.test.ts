@@ -191,6 +191,29 @@ describe("createSessionStore", () => {
     expect(store.isSubagent("ses_b")).toBe(true);
   });
 
+  // Regression: the managed tier agents are materialized as omr-*.md files, so
+  // native Task() dispatches carry the omr- prefix. A dispatch to "omr-fast"
+  // must register like a bare "fast" dispatch (cap state, triviality, guard).
+  it("tracks a subagent session dispatched with the omr- prefixed agent name", () => {
+    const store = createSessionStore();
+    const res = store.registerFromChatMessage(
+      { agent: "omr-fast", sessionID: "ses_b_omr" },
+      dispatch("do recon"),
+      cfg,
+      tierNames,
+    );
+    expect(res).toEqual({ registered: true, resumed: false });
+    expect(store.isSubagent("ses_b_omr")).toBe(true);
+    expect(store.getTier("ses_b_omr")).toBe("fast");
+
+    const out: Record<string, unknown> = {};
+    store.recordToolCall(
+      { sessionID: "ses_b_omr", tool: "read", args: { file_path: "a.ts" } },
+      out,
+    );
+    expect(out.output).toContain("[cap: 1/8]"); // fast baseline, not the "unknown tier" fallback of 5
+  });
+
   it("recordToolCall is a no-op for untracked sessions", () => {
     const store = createSessionStore();
     const out: Record<string, unknown> = { output: "RESULT" };

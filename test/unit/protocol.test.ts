@@ -71,7 +71,7 @@ describe("buildTaskTaxonomy", () => {
   it("builds a taxonomy line when present", () => {
     const out = buildTaskTaxonomy(rich);
     expect(out).toContain("R:");
-    expect(out).toContain("@fast→recon/lookup");
+    expect(out).toContain("@omr-fast→recon/lookup");
   });
   it("skips empty pattern arrays", () => {
     const cfg = { ...rich, taskPatterns: { fast: [] } } as unknown as RouterConfig;
@@ -89,7 +89,7 @@ describe("buildDecomposeHint", () => {
   it("returns an explore→execute hint for >=2 tiers in normal mode", () => {
     const cfg = { ...rich, activeMode: undefined, modes: undefined } as unknown as RouterConfig;
     const out = buildDecomposeHint(cfg);
-    expect(out).toContain("explore(@fast)→execute(@medium)");
+    expect(out).toContain("explore(@omr-fast)→execute(@omr-medium)");
   });
 });
 
@@ -119,16 +119,25 @@ describe("buildFallbackInstructions", () => {
 });
 
 describe("buildDelegationProtocol", () => {
+  // Regression: OpenCode resolves Task(subagent_type=...) against real agent
+  // names, and the managed tier agents are materialized as omr-*.md files.
+  // Naming the bare tier in the dispatch instruction produced
+  // "Unknown agent: fast" on every delegated Task call.
+  it("names the omr- prefixed agent in the Task dispatch syntax", () => {
+    const out = buildDelegationProtocol(minimal);
+    expect(out).toContain('subagent_type="omr-fast"|"omr-medium"|"omr-heavy"');
+    expect(out).not.toContain('subagent_type="fast"|"medium"|"heavy"');
+  });
   it("renders minimal config without optional sections (no costRatio/mode/taxonomy/fallback)", () => {
     const out = buildDelegationProtocol(minimal);
     expect(out).toContain("Preset: p.");
-    expect(out).toContain("@only=model-x"); // no variant, no (Nx)
+    expect(out).toContain("@omr-only=model-x"); // no variant, no (Nx)
     expect(out).not.toContain("mode:");
     expect(out).toContain("1.alpha 2.beta"); // cfg.rules, no overrideRules
   });
   it("renders rich config with variant, costRatio, mode suffix and overrideRules", () => {
     const out = buildDelegationProtocol(rich);
-    expect(out).toContain("@medium=claude-sonnet-4-6/max(5x)");
+    expect(out).toContain("@omr-medium=claude-sonnet-4-6/max(5x)");
     expect(out).toContain("mode:budget");
     expect(out).toContain("1.o1 2.o2"); // overrideRules win
     expect(out).toContain("R:"); // taxonomy present

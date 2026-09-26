@@ -205,7 +205,7 @@ function runEnforced(prompt: string, outFile: string) {
 // the 4th read is blocked; the forcingMessage always contains "NEXT:" and
 // the read_budget observation contains "read/draft".
 const PROMPT =
-  'Use Task(subagent_type="fast", description="recon", prompt="Read these files ONE AT A TIME using the read tool, in this exact order, and after each give a one-line summary: README.md, then package.json, then tsconfig.json, then tiers.json, then LICENSE, then src/index.ts. Use the read tool separately for each file; do not skip any."). After the subagent returns, reply with the single word DONE.';
+  'Use Task(subagent_type="omr-fast", description="recon", prompt="Read these files ONE AT A TIME using the read tool, in this exact order, and after each give a one-line summary: README.md, then package.json, then tsconfig.json, then tiers.json, then LICENSE, then src/index.ts. Use the read tool separately for each file; do not skip any."). After the subagent returns, reply with the single word DONE.';
 
 /**
  * Evidence that the read guard fired.

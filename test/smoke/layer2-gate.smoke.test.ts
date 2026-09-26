@@ -150,8 +150,8 @@ const TASK_PROMPT_INNER = [
  * copy the inner prompt VERBATIM so the acceptance block reaches the tool call.
  */
 const PROMPT =
-  'Dispatch a fast subagent using the Task tool. ' +
-  'Use subagent_type="fast" and copy the following text VERBATIM as the prompt ' +
+  'Dispatch an omr-fast subagent using the Task tool. ' +
+  'Use subagent_type="omr-fast" and copy the following text VERBATIM as the prompt ' +
   "(include EVERY line including the acceptance block — do NOT modify or omit any line):\n\n" +
   TASK_PROMPT_INNER +
   "\n\nAfter the subagent returns, reply with the single word DONE.";

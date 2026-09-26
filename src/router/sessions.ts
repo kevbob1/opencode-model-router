@@ -444,13 +444,18 @@ export function createSessionStore(options: SessionStoreOptions = {}) {
       cfg: RouterConfig,
       tierNames: string[],
     ): RegisterResult {
-      if (!input.agent || !tierNames.includes(input.agent)) {
+      // Agent names arrive both bare ("fast") and omr-prefixed ("omr-fast") —
+      // the plugin's managed tier agents are materialized as omr-*.md files, so
+      // native Task() dispatches carry the prefix, while legacy dispatch text
+      // and the delegate tool still use bare tier names. Normalize to bare so
+      // the tier lookups (tierCaps, DEFAULT_TIER_CAPS, classifyTrivial) work.
+      const requested = input.agent ?? "";
+      const tierName = requested.startsWith("omr-") ? requested.slice(4) : requested;
+      if (!tierName || !tierNames.includes(tierName)) {
         return { registered: false, resumed: false };
       }
 
       subagentSessionIDs.add(input.sessionID);
-
-      const tierName = input.agent;
       const dispatchText = extractDispatchText(output);
       // CAP:none is honored only when the dispatch carries a justification
       // (a `reason:` line). An unjustified CAP:none falls back to the tier

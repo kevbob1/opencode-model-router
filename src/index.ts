@@ -831,10 +831,16 @@ const createRouterCore = async (ctx: any) => {
         if (shouldVerifyTask(input.tool, mode, requireMode)) {
           try {
             const { finalReturnText, childSessionID } = parseTaskResult(output);
-            const producerTier =
+            // Models dispatch with the real agent name ("omr-fast", per the
+            // injected protocol); normalize to the bare tier name so the
+            // escalation ladder lookup works for both spellings.
+            const requestedTier =
               typeof input?.args?.subagent_type === "string"
                 ? input.args.subagent_type
                 : "";
+            const producerTier = requestedTier.startsWith("omr-")
+              ? requestedTier.slice(4)
+              : requestedTier;
             const dod = buildDelegationDoD({
               prompt: input?.args?.prompt,
               description: input?.args?.description,
