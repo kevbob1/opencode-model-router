@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { resolveEnforcementMode } from "../../src/router/enforcement";
 import { loadConfig, invalidateConfigCache } from "../../src/router/config";
 import { resetAgentOptionsEffortWarnings } from "../../src/router/agent-options";
@@ -23,7 +23,7 @@ describe("router-command integration", () => {
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
     invalidateConfigCache();
-    hooks = await ModelRouterPlugin({} as any);
+    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
   });
 
   afterEach(() => {
@@ -108,7 +108,7 @@ describe("router-command integration", () => {
       "utf-8",
     );
     invalidateConfigCache();
-    hooks = await ModelRouterPlugin({} as any);
+    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
 
     const out = { parts: [] as any[] };
     await hooks["command.execute.before"]({ command: "tiers", arguments: "" }, out);
@@ -163,7 +163,7 @@ describe("router-command — model catalog", () => {
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
     invalidateConfigCache();
-    hooks = await ModelRouterPlugin(ctx as any);
+    hooks = await ModelRouterPlugin.createRouterHooks(ctx as any);
   });
 
   afterEach(() => {
@@ -224,7 +224,7 @@ describe("router-command — model catalog", () => {
         },
       },
     };
-    const h: any = await ModelRouterPlugin(slow);
+    const h: any = await ModelRouterPlugin.createRouterHooks(slow);
     // If the hook awaited the fetch, this never settles and the test times out.
     await h["chat.message"]({ sessionID: "s-slow" }, { parts: [] });
     expect(calls).toBe(1);
@@ -234,7 +234,7 @@ describe("router-command — model catalog", () => {
 
   it("emits the passive model warning on a later turn, not on turn 1", async () => {
     invalidateConfigCache();
-    const h: any = await ModelRouterPlugin(ctx as any);
+    const h: any = await ModelRouterPlugin.createRouterHooks(ctx as any);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const warnings = () => warn.mock.calls.map((c) => String(c[0]));
@@ -286,7 +286,7 @@ describe("router-command — model catalog", () => {
       "utf-8",
     );
     invalidateConfigCache();
-    const h: any = await ModelRouterPlugin(ctx as any);
+    const h: any = await ModelRouterPlugin.createRouterHooks(ctx as any);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       await h["chat.message"]({ sessionID: "s1" }, { parts: [] });
@@ -329,7 +329,7 @@ describe("router-command — model catalog", () => {
         },
       },
     };
-    const h: any = await ModelRouterPlugin(flaky);
+    const h: any = await ModelRouterPlugin.createRouterHooks(flaky);
     await h["chat.message"]({ sessionID: "s2" }, { parts: [] });
     await flush();
 
@@ -345,7 +345,7 @@ describe("router-command — model catalog", () => {
       directory: ".",
       client: { config: { providers: async () => { throw new Error("not ready"); } } },
     };
-    const h: any = await ModelRouterPlugin(failing);
+    const h: any = await ModelRouterPlugin.createRouterHooks(failing);
     const out = { parts: [] as any[] };
     await h["command.execute.before"]({ command: "router", arguments: "models" }, out);
     expect(out.parts[0].text).toContain("Model catalog unavailable");
@@ -409,7 +409,7 @@ describe("router-command — passive warnings go to opencode's log", () => {
 
   it("routes stale-model warnings to app.log and leaves the console alone", async () => {
     const logged: any[] = [];
-    const h: any = await ModelRouterPlugin(ctxWithLog(logged) as any);
+    const h: any = await ModelRouterPlugin.createRouterHooks(ctxWithLog(logged) as any);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       await h["chat.message"]({ sessionID: "s1" }, { parts: [] });
@@ -463,7 +463,7 @@ describe("router-command — passive warnings go to opencode's log", () => {
     resetAgentOptionsEffortWarnings();
 
     const logged: any[] = [];
-    const h: any = await ModelRouterPlugin(ctxWithLog(logged) as any);
+    const h: any = await ModelRouterPlugin.createRouterHooks(ctxWithLog(logged) as any);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       await h["config"]({});

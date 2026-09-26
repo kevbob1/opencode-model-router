@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache, loadConfig } from "../../src/router/config";
 
 async function captureGraderParams(): Promise<Record<string, unknown>> {
@@ -30,7 +30,7 @@ async function captureGraderParams(): Promise<Record<string, unknown>> {
     } as any,
   };
 
-  hooks = await ModelRouterPlugin(ctx as any);
+  hooks = await ModelRouterPlugin.createRouterHooks(ctx as any);
   await hooks.tool.delegate.execute({
     task: "complete the task",
     tier: "fast",

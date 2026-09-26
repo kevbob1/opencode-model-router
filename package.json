@@ -47,7 +47,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@opencode-ai/plugin": ">=1.0.0 <2.0.0"
+    "@opencode/plugin": "^2.0.18"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

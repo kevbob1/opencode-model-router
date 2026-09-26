@@ -13,7 +13,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache } from "../../src/router/config";
 import { parseDoDFromAnnotation, parseDoDFromDispatch } from "../../src/verify/dod";
 
@@ -116,7 +116,7 @@ describe("Mode B end-to-end (plan-annotation)", () => {
     const producerCalls: Array<{ tier: string; text: string }> = [];
     const graderQueue = ['{"pass":true,"reasons":[]}'];
 
-    const hooks: any = await ModelRouterPlugin(
+    const hooks: any = await ModelRouterPlugin.createRouterHooks(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
@@ -146,7 +146,7 @@ describe("Mode B end-to-end (plan-annotation)", () => {
       '{"pass":true,"reasons":[]}',
     ];
 
-    const hooks: any = await ModelRouterPlugin(
+    const hooks: any = await ModelRouterPlugin.createRouterHooks(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 

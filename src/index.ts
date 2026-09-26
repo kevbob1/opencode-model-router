@@ -1,4 +1,4 @@
-import type { Plugin, PluginInput } from "@opencode-ai/plugin";
+import type { Plugin } from "@opencode/plugin";
 
 // Imports for internal use within this module
 import {
@@ -71,7 +71,6 @@ import { join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { exec as nodeExec } from "node:child_process";
 import { access, readFile as fsReadFile } from "node:fs/promises";
-import { tool } from "@opencode-ai/plugin";
 import { scrubText } from "./guard/scrub";
 import { accept } from "./verify/gate";
 import { createVerificationWiring, extractAssistantText } from "./verify/wiring";
@@ -209,7 +208,12 @@ function buildPresetOutput(cfg: RouterConfig, args: string): string {
   return buildUnknownPreset(cfg, requestedPreset);
 }
 
-const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
+/**
+ * Core router hooks. The production V2 setup below supplies the native V2
+ * session/provider APIs; the deliberately unexported test seam supplies the
+ * same small client surface with deterministic fakes.
+ */
+const createRouterHooks = async (ctx: any) => {
   let cfg = loadConfig();
   const activeTiers = getActiveTiers(cfg);
 
@@ -245,7 +249,7 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
   // /router enforce) applies to graded work too.
   const { graderSessions, dispatchGrader, buildGateDeps, disposeChildSession } =
     createVerificationWiring({
-      client: ctx.client,
+      client: ctx,
       directory: ctx.directory,
       getConfig: () => cfg,
     });
@@ -275,14 +279,14 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
   // Passive warnings go to opencode's log rather than stderr: console output
   // from a plugin paints over the TUI. Falls back to console when the server
   // has no /log endpoint. See src/router/logger.ts.
-  const logger = createPluginLogger(ctx.client);
+  const logger = createPluginLogger(ctx);
 
   // Fetch and normalize opencode's live provider/model catalog. Best-effort:
   // returns null when the client call fails, e.g. the server is not ready yet.
   // The pure analysis (validateModels) lives in src/router/catalog.ts.
   const fetchCatalog = async (): Promise<Catalog | null> => {
     try {
-      const res: any = await ctx.client.config.providers();
+      const res: any = await ctx.config.providers();
       return normalizeCatalog(res?.data);
     } catch {
       return null;
@@ -335,30 +339,9 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
       await logger.flush();
     },
     tool: {
-      ...(enableDelegateTool ? { delegate: tool({
+      ...(enableDelegateTool ? { delegate: {
         description:
           "Delegate a task to a tier subagent (fast | medium | heavy). The subagent's result is INDEPENDENTLY VERIFIED (deterministic checks, or an independent grader at >= the producer tier in a fresh session) before it is returned. Returns an accepted result on PASS, or an honest 'unmet' status on FAIL — never a self-reported completion. Optionally pass an [acceptance]...[/acceptance] block to define the Definition of Done.",
-        args: {
-          task: tool.schema
-            .string()
-            .describe("The task for the subagent to perform."),
-          tier: tool.schema
-            .string()
-            .optional()
-            .describe("fast | medium | heavy. Defaults to the router default tier."),
-          acceptance: tool.schema
-            .string()
-            .optional()
-            .describe(
-              "Optional [acceptance]...[/acceptance] block defining the Definition of Done (check: / criteria: / deliverable: directives).",
-            ),
-          cwd: tool.schema
-            .string()
-            .optional()
-            .describe(
-              "Optional working directory used to VERIFY the result: relative check paths resolve against it and the grader session runs in it. It does NOT scope the producer subagent, so the task text must still tell the producer where to work.",
-            ),
-        },
         async execute(
           args: {
             task: string;
@@ -426,7 +409,7 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
                 : args.task;
 
               const model = tierModel(activeCfg, tier) ?? undefined;
-              const created: any = await (ctx.client.session.create as any)({
+              const created: any = await (ctx.session.create as any)({
                 body: {
                   ...(toolCtx?.sessionID ? { parentID: toolCtx.sessionID } : {}),
                   ...(model ? { model } : {}),
@@ -459,7 +442,7 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
               let producerError: string | null = null;
               try {
                 const res: any = await withTimeout(
-                  ctx.client.session.prompt({
+                  ctx.session.prompt({
                     path: { id: producerSid },
                     body: {
                       // The internal core keeps the legacy tier metadata for
@@ -537,7 +520,7 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
                 if (error instanceof RouterTimeoutError) {
                   for (const gsid of gateGraderSessions) {
                     try {
-                      await ctx.client.session.abort({ path: { id: gsid } });
+                      await ctx.session.abort({ path: { id: gsid } });
                     } catch {
                       // best-effort: the gate result stands either way
                     }
@@ -645,7 +628,7 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
             }
           }
         },
-      }) } : {}),
+      } } : {}),
     },
 
     // -----------------------------------------------------------------------
@@ -1248,10 +1231,17 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
   };
 };
 
-// Internal compatibility seam for the existing core test suite. This is not
-// part of the default V2 plugin export and is never discovered by OpenCode.
-export const ModelRouterPluginV1 = ModelRouterPlugin;
-
+// Test-only access is grouped under an object so the OpenCode loader never
+// mistakes the hook factory for a plugin export. Tests adapt their fake client
+// once here; production passes the native V2 runtime directly below.
+const createTestRouterHooks = (testContext: any) =>
+  createRouterHooks({
+    ...(testContext.client ?? {}),
+    directory: testContext.directory,
+    project: testContext.project,
+    options: testContext.options,
+  });
+export const testing = { createRouterHooks: createTestRouterHooks };
 
 /**
  * Convert a V1-style agent definition (what the `config` hook builds for tier
@@ -1369,11 +1359,8 @@ function syncGlobalTierAgents(
 // OpenCode V2 plugin definition.
 //
 // V2 loaders round-trip the default export through a schema that requires an
-// object with `id` and a `setup(ctx)` function, and V1 hook objects do not run
-// in V2 (docs/opencode migrate-v1: "V1 plugin implementations do not run in
-// V2"). The V1 factory above is left intact and all of its returned hooks are
-// re-registered through the V2 plugin context below, with shape adapters at
-// each seam.
+// object with `id` and a `setup(ctx)` function. All registrations below use
+// the native V2 plugin context.
 //
 // Confidence notes (ported from the 1.10.0 local patch — verify behaviors live
 // before trusting):
@@ -1383,7 +1370,7 @@ function syncGlobalTierAgents(
 //  - ctx.agent/command.transform  → tier agents + commands
 //  - experimental.text.complete has NO V2 hook (dropped; feature is opt-in/off)
 // ---------------------------------------------------------------------------
-const V2Plugin = {
+const V2Plugin: Plugin.Plugin = {
   id: "opencode-model-router",
   async setup(ctx2: any): Promise<(() => void) | undefined> {
     const availableTierAgents = new Set<string>();
@@ -1395,8 +1382,9 @@ const V2Plugin = {
       }
     };
 
-    // ---- V1 PluginInput shim built over the V2 context --------------------
-    const shimClient = {
+    // Build the small runtime used by the pure router hook implementation from
+    // native V2 domains. No V1 plugin or V1 client API is involved.
+    const nativeRuntime = {
       app: {
         log: async (p: any) => {
           try {
@@ -1464,8 +1452,8 @@ const V2Plugin = {
 
     let hooks: Record<string, any>;
     try {
-      hooks = (await ModelRouterPlugin({
-        client: shimClient,
+      hooks = (await createRouterHooks({
+        ...nativeRuntime,
         directory: ctx2.location?.directory ?? process.cwd(),
         project: ctx2.location?.project ?? {},
         options: ctx2.options,

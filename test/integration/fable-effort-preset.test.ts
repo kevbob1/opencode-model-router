@@ -41,12 +41,12 @@ test("applies fable-effort preset options through config hook", async () => {
     delete process.env.MODEL_ROUTER_ENFORCE;
     process.env.MODEL_ROUTER_VERIFIED_DELEGATE = "1";
 
-    const { ModelRouterPluginV1: ModelRouterPlugin } = await import("../../src/index");
+    const { testing: ModelRouterPlugin } = await import("../../src/index");
     const { invalidateConfigCache, writeState } = await import("../../src/router/config");
     invalidateConfigCache();
     writeState({ activePreset: "fable-effort" });
 
-    const hooks: any = await ModelRouterPlugin(makeFableEffortCtx(dir) as any);
+    const hooks: any = await ModelRouterPlugin.createRouterHooks(makeFableEffortCtx(dir) as any);
     const ocCfg: any = {};
     await hooks.config(ocCfg);
 
@@ -88,12 +88,12 @@ test("registers an effort key only for the tiers that set one", async () => {
     delete process.env.MODEL_ROUTER_ENFORCE;
     process.env.MODEL_ROUTER_VERIFIED_DELEGATE = "1";
 
-    const { ModelRouterPluginV1: ModelRouterPlugin } = await import("../../src/index");
+    const { testing: ModelRouterPlugin } = await import("../../src/index");
     const { invalidateConfigCache, writeState } = await import("../../src/router/config");
     invalidateConfigCache();
     writeState({ activePreset: "anthropic" });
 
-    const hooks: any = await ModelRouterPlugin(makeFableEffortCtx(dir) as any);
+    const hooks: any = await ModelRouterPlugin.createRouterHooks(makeFableEffortCtx(dir) as any);
     const ocCfg: any = {};
     await hooks.config(ocCfg);
 

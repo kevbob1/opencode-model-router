@@ -10,7 +10,7 @@ import { join } from "node:path";
 
 import { expect, test } from "vitest";
 
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import {
   OVERRIDE_FILENAME,
   invalidateConfigCache,
@@ -65,9 +65,9 @@ async function withPluginHome(
 }
 
 async function registerAgents(dir: string): Promise<Record<string, AgentConfig>> {
-  const hooks = (await Reflect.apply(ModelRouterPlugin, undefined, [
+  const hooks = (await ModelRouterPlugin.createRouterHooks(
     makeCtx(dir),
-  ])) as Awaited<ReturnType<typeof ModelRouterPlugin>>;
+  )) as Awaited<ReturnType<typeof ModelRouterPlugin.createRouterHooks>>;
   const ocCfg: OpencodeConfig = {};
   expect(hooks.config).toBeDefined();
   await hooks.config?.(ocCfg);

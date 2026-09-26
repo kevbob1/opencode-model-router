@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { loadConfig } from "../../src/router/config";
 import { getActiveTiers } from "../../src/router/protocol";
 import { createSessionStore } from "../../src/router/sessions";
@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("trajectory wiring (Phase 0.3, record-only)", () => {
   it("GA-1: emitted cap banner is byte-identical with trajectory wiring active", async () => {
-    const plugin: any = await ModelRouterPlugin({} as any);
+    const plugin: any = await ModelRouterPlugin.createRouterHooks({} as any);
     const cfg = loadConfig();
     const tierNames = Object.keys(getActiveTiers(cfg));
     const ref = createSessionStore();
@@ -48,7 +48,7 @@ describe("trajectory wiring (Phase 0.3, record-only)", () => {
 
   it("does NOT track or dump orchestrator (non-subagent) sessions", async () => {
     process.env.MODEL_ROUTER_TRAJECTORY_DEBUG = "1";
-    const plugin: any = await ModelRouterPlugin({} as any);
+    const plugin: any = await ModelRouterPlugin.createRouterHooks({} as any);
     const sid = "ses_orchestrator";
     // No chat.message registering this as a subagent → not tracked.
     const out: any = { output: "RESULT" };
@@ -60,7 +60,7 @@ describe("trajectory wiring (Phase 0.3, record-only)", () => {
 
   it("records a subagent trajectory and writes a gated debug dump on session.idle", async () => {
     process.env.MODEL_ROUTER_TRAJECTORY_DEBUG = "1";
-    const plugin: any = await ModelRouterPlugin({} as any);
+    const plugin: any = await ModelRouterPlugin.createRouterHooks({} as any);
     const sid = "ses_traj_dump";
     rmSync(trajFile(sid), { force: true });
 
@@ -79,7 +79,7 @@ describe("trajectory wiring (Phase 0.3, record-only)", () => {
   });
 
   it("debug dump is a no-op when MODEL_ROUTER_TRAJECTORY_DEBUG is unset", async () => {
-    const plugin: any = await ModelRouterPlugin({} as any);
+    const plugin: any = await ModelRouterPlugin.createRouterHooks({} as any);
     const sid = "ses_no_debug";
     rmSync(trajFile(sid), { force: true });
     await plugin["chat.message"]({ agent: "fast", sessionID: sid }, { parts: [{ text: "recon" }] });

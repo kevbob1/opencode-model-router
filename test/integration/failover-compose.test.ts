@@ -12,7 +12,7 @@ import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { readFileSync } from "node:fs";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache, validateConfig } from "../../src/router/config";
 import { assembleSystemPrompt } from "../../src/router/protocol";
 
@@ -131,7 +131,7 @@ describe("Phase 3.3 — provider-failover / quality-escalation orthogonality", (
     };
 
     process.env.MODEL_ROUTER_ENFORCE = "1";
-    const hooks: any = await ModelRouterPlugin(
+    const hooks: any = await ModelRouterPlugin.createRouterHooks(
       makeCtxCustom(dir, promptHandler) as any,
     );
 
@@ -229,7 +229,7 @@ describe("Phase 3.3 — provider-failover / quality-escalation orthogonality", (
     };
 
     process.env.MODEL_ROUTER_ENFORCE = "1";
-    const hooks: any = await ModelRouterPlugin(
+    const hooks: any = await ModelRouterPlugin.createRouterHooks(
       makeCtxCustom(dir, promptHandler) as any,
     );
 

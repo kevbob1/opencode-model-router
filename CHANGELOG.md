@@ -16,12 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   commands were never registered (so OpenCode passed them to the model as plain
   prompts), and the `fast`/`medium`/`heavy` tier agents were never created. The
   default export is now the documented dual shape: V2 loaders call `setup(ctx)`
-  — the full V1 hook set is re-registered through the V2 plugin context
+  — the router hooks are registered through the V2 plugin context
   (`session.hook("context"|"prompt")`, `tool.hook`, `agent.transform`,
   `command.transform`, `event.subscribe`) with shape adapters at each seam — and
   V1 loaders (1.18.29+) call `server(input)` and receive the V1 hooks object
-  unchanged. `ModelRouterPluginV1` remains exported for direct import; tests and
-  tooling that exercised the V1 factory now import it by name.
+  unchanged. The former `ModelRouterPluginV1` compatibility export was removed;
+  tests now use the V2-only test harness and direct consumers should load the
+  default `{ id, setup }` export.
 
 ### Fixed
 

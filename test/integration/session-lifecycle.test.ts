@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache } from "../../src/router/config";
 
 /**
@@ -105,7 +105,7 @@ async function runDelegate(
   h: Harness,
   ...toolCtxArg: [{ sessionID?: string } | undefined] | []
 ): Promise<string> {
-  const hooks: any = await ModelRouterPlugin(h.ctx as any);
+  const hooks: any = await ModelRouterPlugin.createRouterHooks(h.ctx as any);
   const toolCtx = toolCtxArg.length > 0 ? toolCtxArg[0] : { sessionID: ORCHESTRATOR_SID };
   return hooks.tool.delegate.execute(
     {

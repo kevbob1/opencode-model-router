@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 
 describe("proportional-downgrade integration", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -10,7 +10,7 @@ describe("proportional-downgrade integration", () => {
     savedEnforce = process.env.MODEL_ROUTER_ENFORCE;
     // Force enforced via env gate so guard fires when not trivial.
     process.env.MODEL_ROUTER_ENFORCE = "1";
-    hooks = await ModelRouterPlugin({} as any);
+    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
   });
 
   afterEach(() => {

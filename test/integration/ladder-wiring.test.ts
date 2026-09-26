@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache } from "../../src/router/config";
 
 // ---------------------------------------------------------------------------
@@ -116,7 +116,7 @@ describe("Layer-3 escalation ladder wiring", () => {
       '{"pass":true,"reasons":[]}',
     ];
 
-    const hooks: any = await ModelRouterPlugin(
+    const hooks: any = await ModelRouterPlugin.createRouterHooks(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
@@ -145,7 +145,7 @@ describe("Layer-3 escalation ladder wiring", () => {
       '{"pass":true,"reasons":[]}',
     ];
 
-    const hooks: any = await ModelRouterPlugin(
+    const hooks: any = await ModelRouterPlugin.createRouterHooks(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
@@ -172,7 +172,7 @@ describe("Layer-3 escalation ladder wiring", () => {
       '{"pass":false,"reasons":["bad"]}',
     );
 
-    const hooks: any = await ModelRouterPlugin(
+    const hooks: any = await ModelRouterPlugin.createRouterHooks(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 

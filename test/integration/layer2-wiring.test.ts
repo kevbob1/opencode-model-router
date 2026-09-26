@@ -13,7 +13,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache } from "../../src/router/config";
 
 // ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ describe("Layer-2 wiring", () => {
   describe("Option (i) verify-dispatch — tool.execute.after", () => {
     it("CASE A: appends forcing note when deterministic DoD FAILS (file missing)", async () => {
       process.env.MODEL_ROUTER_ENFORCE = "1";
-      const hooks: any = await ModelRouterPlugin(makeCtx(dir, "grader/producer reply") as any);
+      const hooks: any = await ModelRouterPlugin.createRouterHooks(makeCtx(dir, "grader/producer reply") as any);
 
       const input = {
         tool: "task",
@@ -117,7 +117,7 @@ describe("Layer-2 wiring", () => {
     it("CASE B: does NOT append note when deterministic DoD PASSES (file exists)", async () => {
       process.env.MODEL_ROUTER_ENFORCE = "1";
       fs.writeFileSync(path.join(dir, "present-file.txt"), "ok");
-      const hooks: any = await ModelRouterPlugin(makeCtx(dir, "grader/producer reply") as any);
+      const hooks: any = await ModelRouterPlugin.createRouterHooks(makeCtx(dir, "grader/producer reply") as any);
 
       const input = {
         tool: "task",
@@ -143,7 +143,7 @@ describe("Layer-2 wiring", () => {
     it("CASE C: is a no-op when enforcement is OFF (GA-1 preserved)", async () => {
       // Pin to "off" mode so shouldVerifyTask returns false and the verify block is skipped.
       process.env.MODEL_ROUTER_ENFORCE = "0";
-      const hooks: any = await ModelRouterPlugin(makeCtx(dir, "grader/producer reply") as any);
+      const hooks: any = await ModelRouterPlugin.createRouterHooks(makeCtx(dir, "grader/producer reply") as any);
 
       const input = {
         tool: "task",
@@ -174,7 +174,7 @@ describe("Layer-2 wiring", () => {
   describe("Option (ii) delegate tool", () => {
     it("CASE D: returns accepted on deterministic PASS", async () => {
       fs.writeFileSync(path.join(dir, "deliver.txt"), "x");
-      const hooks: any = await ModelRouterPlugin(
+      const hooks: any = await ModelRouterPlugin.createRouterHooks(
         makeCtx(dir, "I created deliver.txt as requested.") as any,
       );
 
@@ -188,7 +188,7 @@ describe("Layer-2 wiring", () => {
 
     it("CASE E: returns honest unmet on deterministic FAIL", async () => {
       // Fresh temp dir, nope.txt never created.
-      const hooks: any = await ModelRouterPlugin(
+      const hooks: any = await ModelRouterPlugin.createRouterHooks(
         makeCtx(dir, "I totally did it (lying).") as any,
       );
 

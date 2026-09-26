@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache } from "../../src/router/config";
 
 describe("guard-before-wiring integration", () => {
@@ -25,7 +25,7 @@ describe("guard-before-wiring integration", () => {
     process.env.USERPROFILE = dir;
     delete process.env.MODEL_ROUTER_ENFORCE;
     invalidateConfigCache();
-    hooks = await ModelRouterPlugin({} as any);
+    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
     // Register "SUB" as a subagent session by passing agent:"fast"
     // which matches the "fast" tier key in the default anthropic preset.
     await hooks["chat.message"]({ sessionID: "SUB", agent: "fast" }, { parts: [] });

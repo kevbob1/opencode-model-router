@@ -15,7 +15,7 @@ export default defineConfig({
     environment: "node",
     server: {
       deps: {
-        inline: ["@opencode-ai/plugin"],
+        inline: ["@opencode/plugin"],
       },
     },
     coverage: {

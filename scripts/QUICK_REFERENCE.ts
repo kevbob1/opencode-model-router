@@ -189,68 +189,51 @@ function buildPresetOutput(cfg: RouterConfig, args: string): string {
 // 7. COMPLETE MINIMAL EXAMPLE
 // ============================================================================
 
-import type { Plugin, PluginInput } from "@opencode-ai/plugin";
+import type { Plugin } from "@opencode/plugin";
 
-const MinimalPlugin: Plugin = async (_ctx: PluginInput) => {
+const MinimalPlugin: Plugin.Plugin = {
+  id: "minimal-plugin",
+  setup: async (ctx) => {
   let state = { mode: "normal" };
 
-  return {
-    // Register command
-    config: async (opencodeConfig: any) => {
-      opencodeConfig.command ??= {};
-      opencodeConfig.command["mycommand"] = {
-        template: "$ARGUMENTS",
-        description: "My custom command",
-      };
-    },
-
-    // Handle command
-    "command.execute.before": async (input: any, output: any) => {
-      if (input.command === "mycommand") {
-        const args = (input.arguments ?? "").trim();
+  await ctx.command.transform((editor) => {
+    editor.add({
+      name: "mycommand",
+      description: "Show or change the current mode",
+      execute: async ({ prompt, sessionID }) => {
+        const args = (prompt?.text ?? "").trim();
 
         if (!args) {
-          output.parts.push({
-            type: "text" as const,
-            text: `Current mode: ${state.mode}\nUsage: /mycommand <mode>`,
-          });
+          await ctx.session.synthetic({ sessionID, text: `Current mode: ${state.mode}\nUsage: /mycommand <mode>` });
           return;
         }
 
         if (!["normal", "fast", "slow"].includes(args)) {
-          output.parts.push({
-            type: "text" as const,
-            text: `Unknown mode. Available: normal, fast, slow`,
-          });
+          await ctx.session.synthetic({ sessionID, text: "Unknown mode. Available: normal, fast, slow" });
           return;
         }
 
         state.mode = args;
-        output.parts.push({
-          type: "text" as const,
-          text: `Mode changed to: **${args}**`,
-        });
-      }
-    },
-  };
+        await ctx.session.synthetic({ sessionID, text: `Mode changed to: **${args}**` });
+      },
+    });
+  });
 };
 
 // ============================================================================
 // KEY TAKEAWAYS
 // ============================================================================
 /*
-1. REGISTER: opencodeConfig.command["name"] = { template: string, description: string }
-   - template: "" (no args) or "$ARGUMENTS" (with args) or multi-line string
-   
-2. HANDLE: "command.execute.before" hook checks input.command and input.arguments
-   - Push responses to output.parts array: { type: "text" as const, text: string }
-   - NO return value needed — work with output object directly
+1. REGISTER: ctx.command.transform(editor => editor.add({ name, description, execute }))
+   - Commands receive `{ sessionID, prompt }`; read arguments from `prompt.text`.
+
+2. HANDLE: use `ctx.session.synthetic({ sessionID, text })` for user-visible output.
    
 3. PARSE ARGS: Trim, normalize, validate, provide helpful errors
    
 4. PERSIST STATE: Use separate state file, cache config with invalidation
    
-5. INJECT SYSTEM: Use "experimental.chat.system.transform" to modify output.system
+5. INJECT SYSTEM: Use `ctx.session.hook("context", handler)` to modify the V2 event.
    
 6. USER FEEDBACK: Markdown format (bold **text**, code `text`, bullets -), no tui.showToast
 */

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { parseAcceptanceBlock } from "../../src/verify/dod";
 import { buildDoDProtocolSection } from "../../src/router/protocol";
 import { loadConfig, invalidateConfigCache } from "../../src/router/config";
@@ -63,7 +63,7 @@ describe("/annotate-plan template <-> acceptance grammar", () => {
     process.env.USERPROFILE = testHomeDir;
     invalidateConfigCache();
 
-    hooks = await ModelRouterPlugin({} as any);
+    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const opencodeConfig: any = {};
     await hooks.config(opencodeConfig);

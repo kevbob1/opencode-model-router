@@ -9,15 +9,15 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache } from "../../src/router/config";
 
 // ---------------------------------------------------------------------------
 // Fake ctx builder
 // ---------------------------------------------------------------------------
 
-type PluginContext = Parameters<typeof ModelRouterPlugin>[0];
-type PluginHooks = Awaited<ReturnType<typeof ModelRouterPlugin>>;
+type PluginContext = Parameters<typeof ModelRouterPlugin.createRouterHooks>[0];
+type PluginHooks = Awaited<ReturnType<typeof ModelRouterPlugin.createRouterHooks>>;
 type ChatMessageHook = NonNullable<PluginHooks["chat.message"]>;
 type ChatMessageOutput = Parameters<ChatMessageHook>[1];
 
@@ -95,7 +95,7 @@ describe("resume flow", () => {
   });
 
   it("resets per-dispatch read counts while preserving redundant fingerprints on resume", async () => {
-    const hooks = await ModelRouterPlugin(makeCtx(dir));
+    const hooks = await ModelRouterPlugin.createRouterHooks(makeCtx(dir));
     const chatMessage = hooks["chat.message"];
     const toolExecuteAfter = hooks["tool.execute.after"];
     expect(chatMessage).toBeTypeOf("function");
@@ -133,7 +133,7 @@ describe("resume flow", () => {
   });
 
   it("leaves a never-resumed session's banners byte-identical", async () => {
-    const hooks = await ModelRouterPlugin(makeCtx(dir));
+    const hooks = await ModelRouterPlugin.createRouterHooks(makeCtx(dir));
     const chatMessage = hooks["chat.message"];
     const toolExecuteAfter = hooks["tool.execute.after"];
     if (!chatMessage || !toolExecuteAfter) {
@@ -155,7 +155,7 @@ describe("resume flow", () => {
   });
 
   it("enforces the cumulative ceiling across repeated resumes", async () => {
-    const hooks = await ModelRouterPlugin(makeCtx(dir));
+    const hooks = await ModelRouterPlugin.createRouterHooks(makeCtx(dir));
     const chatMessage = hooks["chat.message"];
     const toolExecuteAfter = hooks["tool.execute.after"];
     if (!chatMessage || !toolExecuteAfter) {
@@ -193,7 +193,7 @@ describe("resume flow", () => {
 
   it("re-runs acceptance gates on resumed-session task results", async () => {
     process.env.MODEL_ROUTER_ENFORCE = "1";
-    const hooks = await ModelRouterPlugin(makeCtx(dir));
+    const hooks = await ModelRouterPlugin.createRouterHooks(makeCtx(dir));
     const chatMessage = hooks["chat.message"];
     const toolExecuteAfter = hooks["tool.execute.after"];
     expect(chatMessage).toBeTypeOf("function");

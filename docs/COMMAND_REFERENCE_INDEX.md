@@ -198,9 +198,9 @@ return [
 ```
 opencode-model-router/
 │
-├── src/index.ts (655 lines)
-│   ├── Exports: ModelRouterPlugin (default)
-│   ├── Dependencies: @opencode-ai/plugin
+├── src/index.ts (V2 plugin entrypoint)
+│   ├── Exports: { id, setup } (default)
+│   ├── Dependencies: @opencode/plugin 2.x
 │   ├── Config: tiers.json
 │   └── State: ~/.config/opencode/opencode-model-router.state.json
 │
@@ -350,4 +350,3 @@ All documentation is self-contained in this folder:
 - Original source: `src/index.ts`
 
 No external dependencies needed for understanding the patterns.
-

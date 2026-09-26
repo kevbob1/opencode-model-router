@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { ModelRouterPluginV1 as ModelRouterPlugin } from "../../src/index";
+import { testing as ModelRouterPlugin } from "../../src/index";
 import { invalidateConfigCache } from "../../src/router/config";
 
 describe("concurrency isolation", () => {
@@ -41,7 +41,7 @@ describe("concurrency isolation", () => {
         },
       },
     };
-    hooks = await ModelRouterPlugin(ctx as any);
+    hooks = await ModelRouterPlugin.createRouterHooks(ctx as any);
 
     // Register two subagent sessions with NON-trivial dispatch text so the
     // guard is fully enforced (no trivial-bypass for either session).

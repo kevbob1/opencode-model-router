@@ -2,7 +2,8 @@
  * src/verify/dispatch.ts — PURE helpers shared by both Layer-2 wirings
  * (Option (i) verify-dispatch around the built-in `task` tool, and Option (ii)
  * the plugin-owned `delegate` tool). No fs/network/SDK here; the live adapters
- * (exec/fs/grader) are built in index.ts from PluginInput and injected.
+ * (exec/fs/grader) are built in index.ts from the V2 runtime context and
+ * injected.
  */
 import type { RouterConfig } from "../router/config";
 import { getActiveTiers } from "../router/protocol";
