@@ -1325,12 +1325,6 @@ function toV2AgentInfo(name: string, def: any): any {
   return info;
 }
 
-const OMR_AGENT_BEGIN = "# managed-file: BEGIN opencode-model-router (do not edit)";
-const OMR_AGENT_END = "# managed-file: END opencode-model-router (do not edit)";
-// Files written before the frontmatter-first fix wrapped the managed section
-// in HTML comments, which broke OpenCode's frontmatter parsing.
-const LEGACY_AGENT_BEGIN = "<!-- BEGIN opencode-model-router managed -->";
-const LEGACY_AGENT_END = "<!-- END opencode-model-router managed -->";
 const OMR_AGENT_MARKER = "managedBy: opencode-model-router";
 
 function managedTierAgent(name: string, def: any): string {
@@ -1339,25 +1333,16 @@ function managedTierAgent(name: string, def: any): string {
     .replaceAll("\"", "'");
   const prompt = typeof def?.prompt === "string" ? def.prompt.trim() : "";
   const steps = typeof def?.maxSteps === "number" ? `steps: ${def.maxSteps}\n` : "";
-  // Frontmatter MUST be the first bytes of the file — OpenCode's markdown
-  // agent loader only parses `---` blocks that start at offset 0. Emitting
-  // an HTML comment ahead of the frontmatter made the YAML unparseable, so
-  // `mode: subagent` was dropped and every tier agent defaulted to
-  // `mode: primary` (visible as a main-session agent in the switcher).
-  // Managed markers are therefore YAML comments placed inside the frontmatter.
   return [
     "---",
-    OMR_AGENT_BEGIN,
     `name: omr-${name}`,
     `description: "${description}"`,
     "mode: subagent",
     steps ? `${steps.trimEnd()}` : "",
     OMR_AGENT_MARKER,
-    OMR_AGENT_END,
     "---",
     prompt,
-    "",
-  ].filter(Boolean).join("\n");
+  ].filter(Boolean).join("\n") + "\n";
 }
 
 /** Create/update only router-owned global agents; never overwrite user files. */
@@ -1377,21 +1362,8 @@ function syncGlobalTierAgents(
         warn(`global agent collision: preserving ${file}; tier ${name} is disabled`);
         continue;
       }
-      const start = existing.indexOf(OMR_AGENT_BEGIN);
-      const end = existing.indexOf(OMR_AGENT_END);
-      if (start >= 0 && end >= start) {
-        writeFileSync(file, `${existing.slice(0, start)}${content}${existing.slice(end + OMR_AGENT_END.length)}`);
-      } else if (existing.includes(LEGACY_AGENT_BEGIN) && existing.includes(LEGACY_AGENT_END)) {
-        // Legacy format: the entire file was router-generated, so a full
-        // rewrite is safe and migrates it to the frontmatter-first format.
-        writeFileSync(file, content);
-      } else {
-        warn(`router-managed agent ${file} has an invalid managed section; tier ${name} is disabled`);
-        continue;
-      }
-    } else {
-      writeFileSync(file, content);
     }
+    writeFileSync(file, content);
     available.add(name);
   }
   return available;

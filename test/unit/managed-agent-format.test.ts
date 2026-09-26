@@ -6,19 +6,6 @@ import { testing } from "../../src/index.js";
 
 const { managedTierAgent, syncGlobalTierAgents } = testing;
 
-const LEGACY = [
-  "<!-- BEGIN opencode-model-router managed -->",
-  "---",
-  "name: omr-fast",
-  "description: \"old\"",
-  "mode: subagent",
-  "managedBy: opencode-model-router",
-  "---",
-  "legacy prompt",
-  "<!-- END opencode-model-router managed -->",
-  "",
-].join("\n");
-
 const TIER_DEF = {
   description: "glm-5.3-flash variant=low composite 73.47",
   prompt: "STOP CONDITIONS — read these FIRST.",
@@ -39,10 +26,26 @@ describe("managedTierAgent format", () => {
     expect(content).toContain("managedBy: opencode-model-router");
   });
 
-  it("keeps managed markers as yaml comments, not html comments", () => {
+  it("emits exact frontmatter with no extra comments or HTML wrappers", () => {
+    const content = managedTierAgent("fast", TIER_DEF);
+    expect(content).toBe([
+      "---",
+      "name: omr-fast",
+      "description: \"glm-5.3-flash variant=low composite 73.47\"",
+      "mode: subagent",
+      "steps: 30",
+      "managedBy: opencode-model-router",
+      "---",
+      "STOP CONDITIONS — read these FIRST.",
+      "",
+    ].join("\n"));
+    expect(content.match(/^---$/gm)?.length).toBe(2);
+    expect(content).not.toContain("#");
+  });
+
+  it("keeps managed ownership marker inside the frontmatter", () => {
     const content = managedTierAgent("heavy", TIER_DEF);
-    expect(content).toContain("# managed-file: BEGIN");
-    expect(content).toContain("# managed-file: END");
+    expect(content).toContain("managedBy: opencode-model-router");
     expect(content).not.toContain("<!--");
   });
 });
@@ -61,18 +64,19 @@ describe("syncGlobalTierAgents", () => {
     }
   });
 
-  it("rewrites a legacy html-comment-wrapped file to the new format", () => {
+  it("overwrites existing router-generaged files wholesale by filename", () => {
     const dir = makeAgentsDir();
     try {
-      writeFileSync(join(dir, "omr-fast.md"), LEGACY);
+      // Simulate an old file that had a broken back-to-back frontmatter.
+      writeFileSync(join(dir, "omr-fast.md"), "---\n---\n---\n---\nname: omr-fast\nmode: primary\nmanagedBy: opencode-model-router\n---\nbody");
       const warnings: string[] = [];
       const available = syncGlobalTierAgents({ fast: TIER_DEF }, (m) => warnings.push(m), dir);
       expect(available.has("fast")).toBe(true);
       expect(warnings).toEqual([]);
       const after = readFileSync(join(dir, "omr-fast.md"), "utf8");
-      expect(after.startsWith("---\n")).toBe(true);
-      expect(after).not.toContain("<!--");
+      expect(after.startsWith("---\nname: omr-fast\n")).toBe(true);
       expect(after).toContain("mode: subagent");
+      expect(after).not.toContain("mode: primary");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -81,13 +85,12 @@ describe("syncGlobalTierAgents", () => {
   it("preserves user files that lack the managed marker", () => {
     const dir = makeAgentsDir();
     try {
-      const userFile = join(dir, "omr-fast.md");
-      writeFileSync(userFile, "---\nname: omr-fast\nmode: subagent\n---\nuser content");
+      writeFileSync(join(dir, "omr-fast.md"), "---\nname: omr-fast\nmode: primary\n---\nuser content");
       const warnings: string[] = [];
       const available = syncGlobalTierAgents({ fast: TIER_DEF }, (m) => warnings.push(m), dir);
       expect(available.has("fast")).toBe(false);
       expect(warnings.join("\n")).toContain("collision");
-      expect(readFileSync(userFile, "utf8")).toContain("user content");
+      expect(readFileSync(join(dir, "omr-fast.md"), "utf8")).toContain("user content");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
