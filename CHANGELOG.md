@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Tier agents no longer appear as main-session agents.** Managed `omr-fast` /
+  `omr-medium` / `omr-heavy` global agent files embedded the managed-file HTML
+  comment markers *ahead* of the `---` frontmatter. OpenCode's markdown agent
+  loader only parses frontmatter at the start of the file, so the YAML was
+  discarded and every tier agent fell back to the default `mode: primary` —
+  showing up in the primary agent switcher instead of only the subagent
+  catalog. Managed markers are now YAML comments inside the frontmatter (which
+  starts at offset 0), and files written in the legacy HTML-comment format are
+  migrated to the new layout on the next plugin load.
+  (`test/unit/managed-agent-format.test.ts`)
+
 ## [1.12.0] - 2026-09-20
 
 ### Added
