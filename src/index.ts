@@ -65,9 +65,10 @@ import { createTrajectoryStore } from "./telemetry/trajectory";
 import { createGuardStore } from "./guard/store";
 import { createIdleTtlSweeper } from "./router/idle-sweep";
 import { guardBeforeCall, guardAfterCall, formatScorecard } from "./guard/enforce";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, isAbsolute } from "node:path";
+import { homedir } from "node:os";
 import { exec as nodeExec } from "node:child_process";
 import { access, readFile as fsReadFile } from "node:fs/promises";
 import { tool } from "@opencode-ai/plugin";
@@ -424,9 +425,12 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
                 ? `${scrubText(forcingNote)}\n\n${args.task}`
                 : args.task;
 
-              const created: any = await ctx.client.session.create({
+              const model = tierModel(activeCfg, tier) ?? undefined;
+              const created: any = await (ctx.client.session.create as any)({
                 body: {
                   ...(toolCtx?.sessionID ? { parentID: toolCtx.sessionID } : {}),
+                  ...(model ? { model } : {}),
+                  agent: `omr-${tier}`,
                 },
               });
               const producerSid: string | undefined = created?.data?.id;
@@ -439,7 +443,6 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
                 // non-fatal
               }
 
-              const model = tierModel(activeCfg, tier) ?? undefined;
               let producerText = "";
               // Provider-failover vs quality-escalation precedence (Phase 3.3):
               // Provider-failover is advisory only — a text chain injected into the orchestrator
@@ -459,8 +462,10 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
                   ctx.client.session.prompt({
                     path: { id: producerSid },
                     body: {
-                      ...(model ? { model } : {}),
-                      ...(tier ? { agent: tier } : {}),
+                      // The internal core keeps the legacy tier metadata for
+                      // its test seam; the V2 shim strips it before calling
+                      // session.prompt(), where agent/model are unsupported.
+                      agent: tier,
                       parts: [{ type: "text", text: taskText }],
                     },
                   }),
@@ -1243,7 +1248,10 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
   };
 };
 
+// Internal compatibility seam for the existing core test suite. This is not
+// part of the default V2 plugin export and is never discovered by OpenCode.
 export const ModelRouterPluginV1 = ModelRouterPlugin;
+
 
 /**
  * Convert a V1-style agent definition (what the `config` hook builds for tier
@@ -1299,6 +1307,64 @@ function toV2AgentInfo(name: string, def: any): any {
   return info;
 }
 
+const OMR_AGENT_BEGIN = "<!-- BEGIN opencode-model-router managed -->";
+const OMR_AGENT_END = "<!-- END opencode-model-router managed -->";
+const OMR_AGENT_MARKER = "managedBy: opencode-model-router";
+
+function managedTierAgent(name: string, def: any): string {
+  const description = String(def?.description ?? `@${name} router tier`)
+    .replaceAll("\n", " ")
+    .replaceAll("\"", "'");
+  const prompt = typeof def?.prompt === "string" ? def.prompt.trim() : "";
+  const steps = typeof def?.maxSteps === "number" ? `steps: ${def.maxSteps}\n` : "";
+  return [
+    OMR_AGENT_BEGIN,
+    "---",
+    `name: omr-${name}`,
+    `description: "${description}"`,
+    "mode: subagent",
+    steps ? `${steps.trimEnd()}` : "",
+    OMR_AGENT_MARKER,
+    "---",
+    prompt,
+    OMR_AGENT_END,
+    "",
+  ].filter(Boolean).join("\n");
+}
+
+/** Create/update only router-owned global agents; never overwrite user files. */
+function syncGlobalTierAgents(
+  defs: Record<string, any>,
+  warn: (message: string) => void,
+): Set<string> {
+  const directory = join(homedir(), ".config", "opencode", "agents");
+  mkdirSync(directory, { recursive: true });
+  const available = new Set<string>();
+  for (const [name, def] of Object.entries(defs)) {
+    const file = join(directory, `omr-${name}.md`);
+    const content = managedTierAgent(name, def);
+    if (existsSync(file)) {
+      const existing = readFileSync(file, "utf8");
+      if (!existing.includes(OMR_AGENT_MARKER)) {
+        warn(`global agent collision: preserving ${file}; tier ${name} is disabled`);
+        continue;
+      }
+      const start = existing.indexOf(OMR_AGENT_BEGIN);
+      const end = existing.indexOf(OMR_AGENT_END);
+      if (start >= 0 && end >= start) {
+        writeFileSync(file, `${existing.slice(0, start)}${content}${existing.slice(end + OMR_AGENT_END.length)}`);
+      } else {
+        warn(`router-managed agent ${file} has an invalid managed section; tier ${name} is disabled`);
+        continue;
+      }
+    } else {
+      writeFileSync(file, content);
+    }
+    available.add(name);
+  }
+  return available;
+}
+
 // ---------------------------------------------------------------------------
 // OpenCode V2 plugin definition.
 //
@@ -1320,6 +1386,7 @@ function toV2AgentInfo(name: string, def: any): any {
 const V2Plugin = {
   id: "opencode-model-router",
   async setup(ctx2: any): Promise<(() => void) | undefined> {
+    const availableTierAgents = new Set<string>();
     const safe = async (label: string, fn: () => unknown | Promise<unknown>) => {
       try {
         await fn();
@@ -1355,9 +1422,14 @@ const V2Plugin = {
       session: {
         create: async (a: any) => {
           try {
-            const s: any = await ctx2.session.create(
-              a?.body?.parentID ? { parentID: a.body.parentID } : {},
-            );
+            const body = a?.body ?? {};
+            const s: any = await ctx2.session.create({
+              ...(body.parentID ? { parentID: body.parentID } : {}),
+              ...(body.agent && availableTierAgents.has(String(body.agent).replace(/^omr-/, ""))
+                ? { agent: body.agent }
+                : {}),
+              ...(body.model ? { model: body.model } : {}),
+            });
             return { data: { id: s?.id ?? s?.sessionID ?? "" } };
           } catch {
             return { data: undefined };
@@ -1372,8 +1444,6 @@ const V2Plugin = {
             return await ctx2.session.prompt({
               sessionID: p?.path?.id,
               text,
-              ...("system" in (p?.body ?? {}) ? { system: p.body.system } : {}),
-              ...(p?.body?.model ? { model: p.body.model } : {}),
             } as never);
           } catch (e) {
             return { error: e };
@@ -1497,10 +1567,21 @@ const V2Plugin = {
     } catch (e) {
       console.warn("[model-router] config registration failed:", e);
     }
+    const tierDefinitions = Object.fromEntries(
+      ["fast", "medium", "heavy"]
+        .filter((name) => fakeConfig.agent?.[name])
+        .map((name) => [name, fakeConfig.agent[name]]),
+    );
+    const generatedTierAgents = syncGlobalTierAgents(
+      tierDefinitions,
+      (message) => console.warn(`[model-router] ${message}`),
+    );
+    for (const name of generatedTierAgents) availableTierAgents.add(name);
     await safe("agent-transform", () =>
       ctx2.agent.transform(async (ed: any) => {
         for (const [name, def] of Object.entries(fakeConfig.agent ?? {})) {
           try {
+            if (generatedTierAgents.has(name)) continue;
             // Agent.Info is additionalProperties:false and model must be a
             // Model.Ref object — never hand the raw V1 def to the editor.
             const info = toV2AgentInfo(name, def);
@@ -1528,6 +1609,9 @@ const V2Plugin = {
         }
       }),
     );
+    if (typeof ctx2.agent?.reload === "function") {
+      await ctx2.agent.reload();
+    }
     try {
       await ctx2.command.transform((ed: any) => {
         for (const [name, defC] of Object.entries(fakeConfig.command ?? {}) as [string, any][]) {
@@ -1594,11 +1678,7 @@ const V2Plugin = {
   },
 };
 
-// Dual-shape default export (docs/opencode migrate-v1, "Support V1 and V2 from
-// one package"): V2 loaders call `setup(ctx)`, V1 loaders (1.18.29+) call
-// `server(input)` and receive the V1 hooks object unchanged.
 export default {
   id: V2Plugin.id,
   setup: V2Plugin.setup,
-  server: async (input: PluginInput) => ModelRouterPlugin(input),
 };
