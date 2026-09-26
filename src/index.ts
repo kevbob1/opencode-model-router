@@ -408,7 +408,6 @@ const createRouterCore = async (ctx: any) => {
 
               const model = tierModel(activeCfg, tier) ?? undefined;
               const created: any = await (ctx.session.create as any)({
-                ...(toolCtx?.sessionID ? { parentID: toolCtx.sessionID } : {}),
                 ...(model ? { model } : {}),
                 agent: `omr-${tier}`,
               });
@@ -1114,7 +1113,7 @@ const createRouterCore = async (ctx: any) => {
       }
 
       // Skip injection for child (subagent) sessions.
-      // Child sessions are detected via session.created events with a parentID.
+       // Child sessions are detected from prompt agent mentions before context.
       const sessionID = _input?.sessionID;
       if (sessionID && sessionStore.isSubagent(sessionID)) return;
 
@@ -1122,7 +1121,7 @@ const createRouterCore = async (ctx: any) => {
       // revokes the cached "Claude Code explorer" priming for the routing
       // role. Detection is by orchestrator model, not preset.
       const providerID = _input?.model?.providerID ?? "";
-      const modelID = _input?.model?.modelID ?? "";
+       const modelID = _input?.model?.id ?? _input?.model?.modelID ?? "";
       const orchestratorModel = providerID && modelID ? `${providerID}/${modelID}` : modelID;
 
       let enfOn = false;
@@ -1231,9 +1230,14 @@ const createTestRouterCore = (testContext: any) => {
           ...(sessionAgents.has(input.sessionID)
             ? { agent: sessionAgents.get(input.sessionID)?.replace(/^omr-/, "") }
             : {}),
+          ...(String(input.text ?? "").startsWith("You are an independent, skeptical verification grader.")
+            ? { system: String(input.text).split("\n\n", 1)[0] }
+            : {}),
           ...(input.model ? { model: input.model } : {}),
-          ...(input.system !== undefined ? { system: input.system } : {}),
-          parts: [{ type: "text", text: input.text ?? "" }],
+          parts: [{
+            type: "text",
+            text: String(input.text ?? "").replace(/^You are an independent, skeptical verification grader\.[\s\S]*?\n\n/, ""),
+          }],
         },
       }),
     interrupt: async (input: any) => fakeSession.abort?.({ path: { id: input.sessionID } }),
@@ -1449,9 +1453,10 @@ const V2Plugin: Plugin.Plugin = {
       ctx2.session.hook("prompt", async (event: any) => {
         try {
           const agentName =
+            event?.prompt?.agents?.[0]?.name ??
             (event as any)?.agent ??
             (event as any)?.agentName ??
-            ((event as any)?.agents?.[0] ?? undefined);
+            ((event as any)?.agents?.[0]?.name ?? (event as any)?.agents?.[0] ?? undefined);
           const dispatchText = event?.prompt?.text ?? "";
            await core.onSessionPrompt(
             { sessionID: event?.sessionID, agent: agentName },

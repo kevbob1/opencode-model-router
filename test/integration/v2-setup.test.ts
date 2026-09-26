@@ -70,6 +70,18 @@ describe("native V2 plugin setup", () => {
       expect.arrayContaining(["tiers", "preset", "budget", "bypass", "router"]),
     );
 
+    const promptHook = hooks.get("session:prompt")!;
+    const contextHook = hooks.get("session:context")!;
+    await promptHook({ sessionID: "subagent", prompt: { text: "inspect", agents: [{ name: "fast" }] } });
+    const contextEvent: any = {
+      sessionID: "subagent",
+      model: { providerID: "openai", id: "gpt-5" },
+      system: [],
+      options: {},
+    };
+    await contextHook(contextEvent);
+    expect(contextEvent.system).toEqual([]);
+
     cleanup?.();
   });
 });

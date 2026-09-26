@@ -193,10 +193,12 @@ export function createVerificationWiring(deps: {
     // has real tools, and an unscoped session resolves every read and command
     // against the router's own cwd, so it would happily report "file not found"
     // for work that exists exactly where it was asked for.
+    const cfg = getConfig();
+    const model = tierModel(cfg, req.tier) ?? undefined;
     const created: any = await client.session.create(
       nativeSession
         ? {
-            ...(parentSessionID ? { parentID: parentSessionID } : {}),
+            ...(model ? { model: { providerID: model.providerID, id: model.modelID } } : {}),
             ...(req.cwd ? { location: { directory: req.cwd } } : {}),
           }
         : {
@@ -209,8 +211,6 @@ export function createVerificationWiring(deps: {
     graderSessions.add(sid);
     inFlight?.add(sid);
     try {
-      const cfg = getConfig();
-      const model = tierModel(cfg, req.tier) ?? undefined;
       // Time-boxed for the same reason as the producer prompt, but with a
       // sharper edge: a grader that never answers must not be able to hold the
       // gate open. The RouterTimeoutError is deliberately allowed to propagate
@@ -230,9 +230,7 @@ export function createVerificationWiring(deps: {
           nativeSession
             ? {
                 sessionID: sid,
-                ...(model ? { model } : {}),
-                system: req.system,
-                text: req.prompt,
+                text: `${req.system}\n\n${req.prompt}`,
               }
             : {
                 path: { id: sid },

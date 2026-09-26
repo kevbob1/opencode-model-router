@@ -142,16 +142,16 @@ describe("child session lifecycle", () => {
   });
 
   // -------------------------------------------------------------------------
-  // parentID
+  // V2 session creation shape
   // -------------------------------------------------------------------------
 
-  it("creates every child session with the orchestrator as parentID", async () => {
+  it("does not send the unsupported V1 parentID field", async () => {
     const h = makeHarness({ graderPass: true });
     await runDelegate(h);
 
     expect(h.createOptions.length).toBeGreaterThan(0);
     for (const options of h.createOptions) {
-      expect(options?.body?.parentID).toBe(ORCHESTRATOR_SID);
+      expect(options?.body?.parentID).toBeUndefined();
     }
   });
 
@@ -160,13 +160,9 @@ describe("child session lifecycle", () => {
     await runDelegate(h);
 
     expect(h.graderIDs.length).toBeGreaterThan(0);
-    // Grader sessions are also parented.
-    for (const options of h.createOptions) {
-      expect(options?.body?.parentID).toBe(ORCHESTRATOR_SID);
-    }
   });
 
-  it("omits parentID when no orchestrator session is available", async () => {
+  it("still creates sessions when no orchestrator session is available", async () => {
     const h = makeHarness({ graderPass: true });
     await runDelegate(h, undefined);
 
