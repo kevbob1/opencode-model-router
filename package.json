@@ -3,7 +3,7 @@
   "version": "1.12.0",
   "description": "OpenCode plugin that routes tasks to tiered subagents (fast/medium/heavy) based on complexity",
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./index.ts",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
@@ -39,6 +39,7 @@
     "orchestration"
   ],
   "files": [
+    "index.ts",
     "src/",
     "tiers.json",
     "LICENSE",

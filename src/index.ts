@@ -1320,14 +1320,9 @@ function toV2AgentInfo(name: string, def: any): any {
 const V2Plugin = {
   id: "opencode-model-router",
   async setup(ctx2: any): Promise<(() => void) | undefined> {
-    const safe = (label: string, fn: () => unknown | Promise<unknown>) => {
+    const safe = async (label: string, fn: () => unknown | Promise<unknown>) => {
       try {
-        const r = fn();
-        if (r && typeof (r as Promise<unknown>).catch === "function") {
-          (r as Promise<unknown>).catch((e: unknown) =>
-            console.warn(`[model-router] ${label} registration failed:`, e),
-          );
-        }
+        await fn();
       } catch (e) {
         console.warn(`[model-router] ${label} registration failed:`, e);
       }
@@ -1411,7 +1406,7 @@ const V2Plugin = {
     }
 
     // ---- system prompt + grader temperature (chat.params + system.transform)
-    safe("context-hook", () =>
+    await safe("context-hook", () =>
       ctx2.session.hook("context", async (event: any) => {
         try {
           const pOut: any = { temperature: undefined };
@@ -1441,7 +1436,7 @@ const V2Plugin = {
     );
 
     // ---- subagent dispatch registration (chat.message) ---------------------
-    safe("prompt-hook", () =>
+    await safe("prompt-hook", () =>
       ctx2.session.hook("prompt", async (event: any) => {
         try {
           const agentName =
@@ -1462,7 +1457,7 @@ const V2Plugin = {
     );
 
     // ---- guard before / cap banners after ----------------------------------
-    safe("tool-hooks", () => ctx2.tool.hook("execute.before", async (event: any) => {
+    await safe("tool-hooks", () => ctx2.tool.hook("execute.before", async (event: any) => {
       try {
         await hooks["tool.execute.before"](
           { sessionID: event?.sessionID, tool: event?.tool, args: event?.input },
@@ -1472,7 +1467,7 @@ const V2Plugin = {
         throw e; // before-hook throws are the intended hard-block mechanism
       }
     }));
-    safe("tool-after-hook", () =>
+    await safe("tool-after-hook", () =>
       ctx2.tool.hook("execute.after", async (event: any) => {
         const original: unknown = event?.output ?? event?.result;
         const outRef: any = {
@@ -1502,7 +1497,7 @@ const V2Plugin = {
     } catch (e) {
       console.warn("[model-router] config registration failed:", e);
     }
-    safe("agent-transform", () =>
+    await safe("agent-transform", () =>
       ctx2.agent.transform(async (ed: any) => {
         for (const [name, def] of Object.entries(fakeConfig.agent ?? {})) {
           try {

@@ -39,8 +39,8 @@ const AGENT = "SmokeScout";
 // `claude-opus-4-8`, which predate a preset refresh) and were re-derived
 // from tiers.json's `anthropic` preset — fast is now claude-sonnet-5 with
 // no variant, heavy is claude-fable-5 with variant "max".
-const FAST_MODEL = { providerID: "anthropic", modelID: "claude-sonnet-5" };
-const HEAVY_MODEL = { providerID: "anthropic", modelID: "claude-fable-5" };
+const FAST_MODEL = { providerID: "anthropic", id: "claude-sonnet-5" };
+const HEAVY_MODEL = { providerID: "anthropic", id: "claude-fable-5" };
 const HEAVY_VARIANT = "max";
 
 // Each case shells out to a real opencode. The first one also pays process
@@ -64,7 +64,13 @@ function writeOverrides(body: Record<string, unknown>): void {
 function debugAgent(name: string): Record<string, any> {
   const result = spawnSync("opencode", ["debug", "agents"], {
     cwd: projectDir,
-    env: { ...process.env, HOME: homeDir },
+      // Keep HOME so the managed service can discover its runtime, while
+      // isolating config and state from the developer's global installation.
+      env: {
+        ...process.env,
+        XDG_CONFIG_HOME: homeDir,
+        XDG_STATE_HOME: homeDir,
+      },
     encoding: "utf8",
     timeout: 120_000,
   });
@@ -138,7 +144,7 @@ d("subagentTiers smoke", () => {
     writeOverrides({ subagentTiers: { [AGENT]: "heavy" } });
     const agent = debugAgent(AGENT);
     expect(agent.model).toEqual(HEAVY_MODEL);
-    expect(agent.variant).toBe(HEAVY_VARIANT);
+    expect(agent.model.variant).toBe(HEAVY_VARIANT);
   }, SMOKE_TIMEOUT_MS);
 
   it("clears a variant when moving to a tier that has none", () => {
@@ -148,7 +154,7 @@ d("subagentTiers smoke", () => {
     writeOverrides({ subagentTiers: { [AGENT]: "fast" } });
     const agent = debugAgent(AGENT);
     expect(agent.model).toEqual(FAST_MODEL);
-    expect(agent.variant ?? null).toBeNull();
+    expect(agent.model.variant ?? null).toBeNull();
   }, SMOKE_TIMEOUT_MS);
 
   it("ignores an unknown tier name rather than failing startup", () => {

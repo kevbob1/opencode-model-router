@@ -40,7 +40,7 @@ const PRESET = "smoke-keyless";
 // An OpenAI model asked for `xhigh`, which the options builder must downgrade
 // to `high`. Seeing that downgrade in the returned agent proves the config
 // hook, override resolution and agent-options building all ran for real.
-const OPENAI_MODEL = { providerID: "openai", modelID: "gpt-5.6-luna-fast" };
+const OPENAI_MODEL = { providerID: "openai", id: "gpt-5.6-luna-fast" };
 
 // Each case shells out to a real opencode. The first one also pays process
 // cold-start, which exceeds vitest's 5s default on slower hosts (Windows CI
@@ -60,7 +60,13 @@ interface DebugAgentResult {
 function debugAgent(name: string): DebugAgentResult {
   const result = spawnSync("opencode", ["debug", "agents"], {
     cwd: projectDir,
-    env: { ...process.env, HOME: homeDir },
+      // Keep HOME so the managed service can discover its runtime, while
+      // isolating config and state from the developer's global installation.
+      env: {
+        ...process.env,
+        XDG_CONFIG_HOME: homeDir,
+        XDG_STATE_HOME: homeDir,
+      },
     encoding: "utf8",
     timeout: 120_000,
   });
@@ -106,7 +112,7 @@ beforeAll(() => {
         presets: {
           [PRESET]: {
             fast: {
-              model: `${OPENAI_MODEL.providerID}/${OPENAI_MODEL.modelID}`,
+              model: `${OPENAI_MODEL.providerID}/${OPENAI_MODEL.id}`,
               effort: "xhigh",
             },
           },
@@ -149,11 +155,12 @@ d("keyless registration smoke", () => {
         (a) => a.id === "fast",
       ) as Record<string, any> | undefined;
       expect(agent).toBeDefined();
+      if (!agent) throw new Error("fast agent was not registered");
       expect(agent!.model).toEqual(OPENAI_MODEL);
       // xhigh -> high downgrade: OpenAI has no `xhigh` reasoning effort, so
       // the options builder must clamp it. Seeing `high` here proves the
       // config hook and override resolution ran inside a real opencode.
-      expect(agent.options?.reasoning_effort).toBe("high");
+      expect(agent.request?.body?.reasoning_effort).toBe("high");
 
       // REGRESSION GUARD — this assertion is the point of this file.
       // A passive warning reaching stderr is the exact bug #35 fixed:
