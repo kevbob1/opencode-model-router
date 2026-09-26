@@ -1245,6 +1245,60 @@ const ModelRouterPlugin: Plugin = async (ctx: PluginInput) => {
 
 export const ModelRouterPluginV1 = ModelRouterPlugin;
 
+/**
+ * Convert a V1-style agent definition (what the `config` hook builds for tier
+ * agents) into the V2 `Agent.Info` shape served by opencode >= 2.0
+ * (GET /openapi.json → components.schemas["Agent.Info"]).
+ *
+ * Mapping:
+ *  - `model: "provider/model"` string → `Model.Ref` `{ providerID, id }`. A
+ *    `#variant` suffix on the string or a top-level `variant` becomes
+ *    `Model.Ref.variant`. Passing the V1 string through verbatim makes the
+ *    server reject the whole /api/agent response encoding ("Expected
+ *    Model.Ref | undefined at data[N].model") and every agent-list call 400s.
+ *  - `maxSteps` → `steps`
+ *  - `prompt` → `system`
+ *  - `options` (raw provider body fields like `reasoning_effort`,
+ *    `budget_tokens`) → `request.body`
+ *  - Required Agent.Info fields (`id`, `name`, `request`, `mode`, `hidden`,
+ *    `permissions`) are filled in. Agent.Info is additionalProperties:false,
+ *    so V1-only keys (`variant`, `maxSteps`, `prompt`, `options`) must be
+ *    dropped rather than passed through.
+ */
+function toV2AgentInfo(name: string, def: any): any {
+  const info: any = {
+    id: name,
+    name,
+    mode: def?.mode ?? "subagent",
+    hidden: def?.hidden ?? false,
+    permissions: Array.isArray(def?.permissions) ? def.permissions : [],
+    request: {
+      settings: {},
+      headers: {},
+      body: { ...(def?.options ?? {}) },
+    },
+  };
+  if (typeof def?.model === "string" && def.model.includes("/")) {
+    const slash = def.model.indexOf("/");
+    const providerID = def.model.slice(0, slash);
+    let id = def.model.slice(slash + 1);
+    let variant: string | undefined =
+      typeof def.variant === "string" && def.variant ? def.variant : undefined;
+    const hash = id.indexOf("#");
+    if (hash >= 0) {
+      variant = variant ?? id.slice(hash + 1);
+      id = id.slice(0, hash);
+    }
+    info.model = variant ? { providerID, id, variant } : { providerID, id };
+  }
+  if (typeof def?.description === "string") info.description = def.description;
+  if (typeof def?.prompt === "string") info.system = def.prompt;
+  if (typeof def?.color === "string") info.color = def.color;
+  const steps = def?.maxSteps ?? def?.steps;
+  if (typeof steps === "number" && steps > 0) info.steps = steps;
+  return info;
+}
+
 // ---------------------------------------------------------------------------
 // OpenCode V2 plugin definition.
 //
@@ -1452,14 +1506,25 @@ const V2Plugin = {
       ctx2.agent.transform(async (ed: any) => {
         for (const [name, def] of Object.entries(fakeConfig.agent ?? {})) {
           try {
-            if (typeof ed.add === "function") ed.add(name, def as never);
+            // Agent.Info is additionalProperties:false and model must be a
+            // Model.Ref object — never hand the raw V1 def to the editor.
+            const info = toV2AgentInfo(name, def);
+            if (typeof ed.add === "function") ed.add(name, info as never);
             else if (typeof ed.update === "function") {
               // V2 AgentEditor.update takes a mutation callback over an
-              // existing agent; merge the tier def in. Warn (not silent) when
-              // neither registration path exists on the editor we were given.
+              // existing agent; merge the converted tier def in, keeping the
+              // existing agent's request settings/headers and permissions.
               ed.update(name, (agent: any) => {
-                if (agent && typeof agent === "object") Object.assign(agent, def);
-                else throw new Error(`agent "${name}" does not exist to update`);
+                if (!agent || typeof agent !== "object")
+                  throw new Error(`agent "${name}" does not exist to update`);
+                info.request = {
+                  settings: agent.request?.settings ?? {},
+                  headers: agent.request?.headers ?? {},
+                  body: { ...(agent.request?.body ?? {}), ...info.request.body },
+                };
+                if (Array.isArray(agent.permissions) && agent.permissions.length > 0)
+                  info.permissions = agent.permissions;
+                Object.assign(agent, info);
               });
             }
           } catch (e) {
