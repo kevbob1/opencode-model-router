@@ -105,9 +105,9 @@ async function runDelegate(
   h: Harness,
   ...toolCtxArg: [{ sessionID?: string } | undefined] | []
 ): Promise<string> {
-  const hooks: any = await ModelRouterPlugin.createRouterHooks(h.ctx as any);
+  const hooks: any = await ModelRouterPlugin.createRouterCore(h.ctx as any);
   const toolCtx = toolCtxArg.length > 0 ? toolCtxArg[0] : { sessionID: ORCHESTRATOR_SID };
-  return hooks.tool.delegate.execute(
+  return hooks.delegate.execute(
     {
       task: "do the thing",
       tier: "fast",

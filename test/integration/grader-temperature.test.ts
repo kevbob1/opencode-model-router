@@ -18,7 +18,7 @@ async function captureGraderParams(): Promise<Record<string, unknown>> {
         create: async () => ({ data: { id: graderSessionID } }),
         prompt: async (request: any) => {
           if (request.body.system !== undefined) {
-            await hooks["chat.params"]({ sessionID: graderSessionID }, params);
+            await hooks.onGraderContext({ sessionID: graderSessionID }, params);
             return {
               data: { parts: [{ type: "text", text: '{"pass":true,"reasons":[]}' }] },
             };
@@ -30,8 +30,8 @@ async function captureGraderParams(): Promise<Record<string, unknown>> {
     } as any,
   };
 
-  hooks = await ModelRouterPlugin.createRouterHooks(ctx as any);
-  await hooks.tool.delegate.execute({
+  hooks = await ModelRouterPlugin.createRouterCore(ctx as any);
+  await hooks.delegate.execute({
     task: "complete the task",
     tier: "fast",
     acceptance: "[acceptance]\ncriteria: result is correct\n[/acceptance]",

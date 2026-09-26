@@ -46,9 +46,9 @@ test("applies fable-effort preset options through config hook", async () => {
     invalidateConfigCache();
     writeState({ activePreset: "fable-effort" });
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(makeFableEffortCtx(dir) as any);
+    const hooks: any = await ModelRouterPlugin.createRouterCore(makeFableEffortCtx(dir) as any);
     const ocCfg: any = {};
-    await hooks.config(ocCfg);
+    await hooks.configure(ocCfg);
 
     expect(ocCfg.agent.fast.model).toBe("anthropic/claude-fable-5");
     expect(ocCfg.agent.fast.options.effort).toBe("low");
@@ -93,9 +93,9 @@ test("registers an effort key only for the tiers that set one", async () => {
     invalidateConfigCache();
     writeState({ activePreset: "anthropic" });
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(makeFableEffortCtx(dir) as any);
+    const hooks: any = await ModelRouterPlugin.createRouterCore(makeFableEffortCtx(dir) as any);
     const ocCfg: any = {};
-    await hooks.config(ocCfg);
+    await hooks.configure(ocCfg);
 
     // The bundled anthropic preset sets `effort: "high"` on medium only, and
     // medium is an Anthropic model, so it maps onto `effort` (not

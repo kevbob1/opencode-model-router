@@ -10,7 +10,7 @@ describe("proportional-downgrade integration", () => {
     savedEnforce = process.env.MODEL_ROUTER_ENFORCE;
     // Force enforced via env gate so guard fires when not trivial.
     process.env.MODEL_ROUTER_ENFORCE = "1";
-    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
+    hooks = await ModelRouterPlugin.createRouterCore({} as any);
   });
 
   afterEach(() => {
@@ -23,12 +23,12 @@ describe("proportional-downgrade integration", () => {
 
   it("trivial dispatch: self-script not hard-blocked (downgraded to advisory)", async () => {
     // Trivial text → isTrivial returns true → guard downgrades to advisory → no throw.
-    await hooks["chat.message"](
+    await hooks.onSessionPrompt(
       { sessionID: "TRIV", agent: "fast" },
       { parts: [{ type: "text", text: "grep for the handler function" }] },
     );
     await expect(
-      hooks["tool.execute.before"](
+      hooks.onToolBefore(
         { sessionID: "TRIV", tool: "bash", callID: "c1" },
         { args: { command: 'node -e "console.log(1)"' } },
       ),
@@ -41,7 +41,7 @@ describe("proportional-downgrade integration", () => {
   // test/smoke/guard-hardblock.smoke.test.ts, which is the real-session proof of
   // the same behaviour; this is its deterministic in-process counterpart.
   it("multi-file recon dispatch: self-script is hard-blocked (not trivial)", async () => {
-    await hooks["chat.message"](
+    await hooks.onSessionPrompt(
       { sessionID: "RECON", agent: "fast" },
       {
         parts: [
@@ -57,7 +57,7 @@ describe("proportional-downgrade integration", () => {
       },
     );
     await expect(
-      hooks["tool.execute.before"](
+      hooks.onToolBefore(
         { sessionID: "RECON", tool: "bash", callID: "c3" },
         { args: { command: 'node -e "console.log(1)"' } },
       ),
@@ -67,7 +67,7 @@ describe("proportional-downgrade integration", () => {
   // Opposite arm: the narrowing must not over-correct. A genuine single-shot
   // lookup stays trivial and stays exempt (GA-6 proportionality).
   it("single-shot one-file lookup: still trivial, not hard-blocked", async () => {
-    await hooks["chat.message"](
+    await hooks.onSessionPrompt(
       { sessionID: "LOOKUP", agent: "fast" },
       {
         parts: [
@@ -76,7 +76,7 @@ describe("proportional-downgrade integration", () => {
       },
     );
     await expect(
-      hooks["tool.execute.before"](
+      hooks.onToolBefore(
         { sessionID: "LOOKUP", tool: "bash", callID: "c4" },
         { args: { command: 'node -e "console.log(1)"' } },
       ),
@@ -85,12 +85,12 @@ describe("proportional-downgrade integration", () => {
 
   it("non-trivial dispatch: self-script is hard-blocked", async () => {
     // Non-trivial text → isTrivial returns false → enforcement stays enforced → throws.
-    await hooks["chat.message"](
+    await hooks.onSessionPrompt(
       { sessionID: "REAL", agent: "fast" },
       { parts: [{ type: "text", text: "implement the api-endpoint and write-tests" }] },
     );
     await expect(
-      hooks["tool.execute.before"](
+      hooks.onToolBefore(
         { sessionID: "REAL", tool: "bash", callID: "c2" },
         { args: { command: 'node -e "console.log(1)"' } },
       ),

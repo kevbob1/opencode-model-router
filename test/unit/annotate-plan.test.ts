@@ -63,10 +63,10 @@ describe("/annotate-plan template <-> acceptance grammar", () => {
     process.env.USERPROFILE = testHomeDir;
     invalidateConfigCache();
 
-    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
+    hooks = await ModelRouterPlugin.createRouterCore({} as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const opencodeConfig: any = {};
-    await hooks.config(opencodeConfig);
+    await hooks.configure(opencodeConfig);
     registered = opencodeConfig.command?.["annotate-plan"];
     template = typeof registered?.template === "string" ? registered.template : "";
   });

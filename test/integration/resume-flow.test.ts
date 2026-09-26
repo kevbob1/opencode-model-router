@@ -16,9 +16,9 @@ import { invalidateConfigCache } from "../../src/router/config";
 // Fake ctx builder
 // ---------------------------------------------------------------------------
 
-type PluginContext = Parameters<typeof ModelRouterPlugin.createRouterHooks>[0];
-type PluginHooks = Awaited<ReturnType<typeof ModelRouterPlugin.createRouterHooks>>;
-type ChatMessageHook = NonNullable<PluginHooks["chat.message"]>;
+type PluginContext = Parameters<typeof ModelRouterPlugin.createRouterCore>[0];
+type PluginHooks = Awaited<ReturnType<typeof ModelRouterPlugin.createRouterCore>>;
+type ChatMessageHook = NonNullable<PluginHooks["onSessionPrompt"]>;
 type ChatMessageOutput = Parameters<ChatMessageHook>[1];
 
 function makeCtx(dir: string): PluginContext {
@@ -95,9 +95,9 @@ describe("resume flow", () => {
   });
 
   it("resets per-dispatch read counts while preserving redundant fingerprints on resume", async () => {
-    const hooks = await ModelRouterPlugin.createRouterHooks(makeCtx(dir));
-    const chatMessage = hooks["chat.message"];
-    const toolExecuteAfter = hooks["tool.execute.after"];
+    const hooks = await ModelRouterPlugin.createRouterCore(makeCtx(dir));
+    const chatMessage = hooks.onSessionPrompt;
+    const toolExecuteAfter = hooks.onToolAfter;
     expect(chatMessage).toBeTypeOf("function");
     expect(toolExecuteAfter).toBeTypeOf("function");
     if (!chatMessage || !toolExecuteAfter) {
@@ -133,9 +133,9 @@ describe("resume flow", () => {
   });
 
   it("leaves a never-resumed session's banners byte-identical", async () => {
-    const hooks = await ModelRouterPlugin.createRouterHooks(makeCtx(dir));
-    const chatMessage = hooks["chat.message"];
-    const toolExecuteAfter = hooks["tool.execute.after"];
+    const hooks = await ModelRouterPlugin.createRouterCore(makeCtx(dir));
+    const chatMessage = hooks.onSessionPrompt;
+    const toolExecuteAfter = hooks.onToolAfter;
     if (!chatMessage || !toolExecuteAfter) {
       throw new Error("required plugin hooks were not registered");
     }
@@ -155,9 +155,9 @@ describe("resume flow", () => {
   });
 
   it("enforces the cumulative ceiling across repeated resumes", async () => {
-    const hooks = await ModelRouterPlugin.createRouterHooks(makeCtx(dir));
-    const chatMessage = hooks["chat.message"];
-    const toolExecuteAfter = hooks["tool.execute.after"];
+    const hooks = await ModelRouterPlugin.createRouterCore(makeCtx(dir));
+    const chatMessage = hooks.onSessionPrompt;
+    const toolExecuteAfter = hooks.onToolAfter;
     if (!chatMessage || !toolExecuteAfter) {
       throw new Error("required plugin hooks were not registered");
     }
@@ -193,9 +193,9 @@ describe("resume flow", () => {
 
   it("re-runs acceptance gates on resumed-session task results", async () => {
     process.env.MODEL_ROUTER_ENFORCE = "1";
-    const hooks = await ModelRouterPlugin.createRouterHooks(makeCtx(dir));
-    const chatMessage = hooks["chat.message"];
-    const toolExecuteAfter = hooks["tool.execute.after"];
+    const hooks = await ModelRouterPlugin.createRouterCore(makeCtx(dir));
+    const chatMessage = hooks.onSessionPrompt;
+    const toolExecuteAfter = hooks.onToolAfter;
     expect(chatMessage).toBeTypeOf("function");
     expect(toolExecuteAfter).toBeTypeOf("function");
     if (!chatMessage || !toolExecuteAfter) {

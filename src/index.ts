@@ -209,11 +209,10 @@ function buildPresetOutput(cfg: RouterConfig, args: string): string {
 }
 
 /**
- * Core router hooks. The production V2 setup below supplies the native V2
- * session/provider APIs; the deliberately unexported test seam supplies the
- * same small client surface with deterministic fakes.
+ * Core router behavior. The production V2 setup supplies native V2 domains;
+ * the test seam adapts deterministic fakes once at the boundary.
  */
-const createRouterHooks = async (ctx: any) => {
+const createRouterCore = async (ctx: any) => {
   let cfg = loadConfig();
   const activeTiers = getActiveTiers(cfg);
 
@@ -234,7 +233,7 @@ const createRouterHooks = async (ctx: any) => {
   const changedFileStore = createChangedFileStore();
 
   // Idle-TTL maintenance for the four per-instance stores. No timer is
-  // scheduled: the sweeper is invoked opportunistically from chat.message and
+  // scheduled: the sweeper is invoked opportunistically from session prompts and
   // self-throttles, so a long-lived plugin instance cannot accumulate state for
   // sessions that went away without a teardown hook.
   const sweepIdleStores = createIdleTtlSweeper([
@@ -286,15 +285,15 @@ const createRouterHooks = async (ctx: any) => {
   // The pure analysis (validateModels) lives in src/router/catalog.ts.
   const fetchCatalog = async (): Promise<Catalog | null> => {
     try {
-      const res: any = await ctx.config.providers();
-      return normalizeCatalog(res?.data);
+      const res: any = await ctx.provider.list();
+      return normalizeCatalog(res?.data ?? res);
     } catch {
       return null;
     }
   };
 
   // Deferred passive catalog check. The first orchestrator turn only STARTS the
-  // fetch (fire-and-forget, never awaited on the chat.message hot path) and
+  // fetch (fire-and-forget, never awaited on the session prompt hot path) and
   // parks the result in a local; the warning is emitted on the first LATER turn
   // that finds the promise already settled — normally turn 2. Deliberate
   // tradeoff: a report-only diagnostic showing up one turn late costs nothing,
@@ -338,8 +337,7 @@ const createRouterHooks = async (ctx: any) => {
     dispose: async () => {
       await logger.flush();
     },
-    tool: {
-      ...(enableDelegateTool ? { delegate: {
+    delegate: enableDelegateTool ? {
         description:
           "Delegate a task to a tier subagent (fast | medium | heavy). The subagent's result is INDEPENDENTLY VERIFIED (deterministic checks, or an independent grader at >= the producer tier in a fresh session) before it is returned. Returns an accepted result on PASS, or an honest 'unmet' status on FAIL — never a self-reported completion. Optionally pass an [acceptance]...[/acceptance] block to define the Definition of Done.",
         async execute(
@@ -410,13 +408,11 @@ const createRouterHooks = async (ctx: any) => {
 
               const model = tierModel(activeCfg, tier) ?? undefined;
               const created: any = await (ctx.session.create as any)({
-                body: {
-                  ...(toolCtx?.sessionID ? { parentID: toolCtx.sessionID } : {}),
-                  ...(model ? { model } : {}),
-                  agent: `omr-${tier}`,
-                },
+                ...(toolCtx?.sessionID ? { parentID: toolCtx.sessionID } : {}),
+                ...(model ? { model } : {}),
+                agent: `omr-${tier}`,
               });
-              const producerSid: string | undefined = created?.data?.id;
+              const producerSid: string | undefined = created?.id ?? created?.data?.id;
               if (!producerSid) return null;
               producerSessions.push(producerSid);
               // Compose with Layer 1: guard the plugin-created producer session.
@@ -442,16 +438,7 @@ const createRouterHooks = async (ctx: any) => {
               let producerError: string | null = null;
               try {
                 const res: any = await withTimeout(
-                  ctx.session.prompt({
-                    path: { id: producerSid },
-                    body: {
-                      // The internal core keeps the legacy tier metadata for
-                      // its test seam; the V2 shim strips it before calling
-                      // session.prompt(), where agent/model are unsupported.
-                      agent: tier,
-                      parts: [{ type: "text", text: taskText }],
-                    },
-                  }),
+                  ctx.session.prompt({ sessionID: producerSid, text: taskText }),
                   timeoutMs(
                     activeCfg.enforcement?.verify?.delegateTimeoutMs,
                     DEFAULT_DELEGATE_PROMPT_TIMEOUT_MS,
@@ -520,7 +507,7 @@ const createRouterHooks = async (ctx: any) => {
                 if (error instanceof RouterTimeoutError) {
                   for (const gsid of gateGraderSessions) {
                     try {
-                      await ctx.session.abort({ path: { id: gsid } });
+                      await ctx.session.interrupt({ sessionID: gsid });
                     } catch {
                       // best-effort: the gate result stands either way
                     }
@@ -628,28 +615,19 @@ const createRouterHooks = async (ctx: any) => {
             }
           }
         },
-      } } : {}),
-    },
+      } : undefined,
 
     // -----------------------------------------------------------------------
-    // Detect subagent calls via chat.message. When the agent name matches a
-    // registered tier, record the sessionID so system.transform can skip
+    // Detect subagent calls via session prompt admission. When the agent name matches a
+    // registered tier, record the sessionID so context can skip
     // delegation-protocol injection.
     //
-    // IMPORTANT: must be chat.message, NOT chat.params. The opencode hook
-    // order is chat.message -> system.transform -> chat.params, so populating
-    // the Set in chat.params is always one step too late — system.transform
-    // already ran with an empty Set and leaked the "Delegate with Task(...)"
-    // instructions into the subagent's system prompt. Sonnet subagents like
-    // @explore silently ignore that noise, but literal-minded Haiku (@fast)
-    // emits malformed XML tool calls for the nonexistent Task tool, which
-    // surface in the UI as "<parameter>...</parameter>" leakage.
-    //
-    // chat.message fires inside SessionPrompt.createUserMessage() BEFORE the
-    // loop -> LLM.stream path, so by the time system.transform runs the Set
+    // The prompt admission hook runs before context construction, so populating
+    // the Set here ensures the context hook can skip subagent protocol injection.
+    // Prompt admission fires before the model loop, so by the time context runs the Set
     // is fully populated and await-safe (yield* on the plugin trigger).
     // -----------------------------------------------------------------------
-    "chat.params": async (input: any, output: any) => {
+    onGraderContext: async (input: any, output: any) => {
       try {
         if (input?.sessionID && graderSessions.has(input.sessionID)) {
           const graderTemperature = cfg.enforcement?.verify?.graderTemperature;
@@ -662,7 +640,7 @@ const createRouterHooks = async (ctx: any) => {
       }
     },
 
-    "chat.message": async (input: any, output: any) => {
+    onSessionPrompt: async (input: any, output: any) => {
       if (bypassed) return;
       // Re-read cfg so /preset switches take effect without restart
       try {
@@ -765,7 +743,7 @@ const createRouterHooks = async (ctx: any) => {
     // Throws to abort the tool call when a guard fires; never throws for
     // non-subagent sessions or when enforcement is off (GA-1 preserved).
     // -----------------------------------------------------------------------
-    "tool.execute.before": async (input: any, output: any) => {
+    onToolBefore: async (input: any, output: any) => {
       if (bypassed) return;
       const sid = input?.sessionID;
       if (!sid || !sessionStore.isSubagent(sid) || typeof input?.tool !== "string") {
@@ -807,7 +785,7 @@ const createRouterHooks = async (ctx: any) => {
     // inside `output.output` — the tool's own response text — the model
     // treats them as ground truth rather than advisory system noise.
     // -----------------------------------------------------------------------
-    "tool.execute.after": async (input: any, output: any) => {
+    onToolAfter: async (input: any, output: any) => {
       if (bypassed) return;
       sessionStore.recordToolCall(input, output);
 
@@ -933,7 +911,7 @@ const createRouterHooks = async (ctx: any) => {
     // telemetry, not blocking — we cannot modify mid-stream generation, only
     // post-hoc signal.
     // -----------------------------------------------------------------------
-    "experimental.text.complete": async (input: any, output: any) => {
+    onTextComplete: async (input: any, output: any) => {
       if (bypassed || !cfg.antiNarration) return;
       const text = output?.text;
       if (typeof text !== "string" || text.length < 20) return;
@@ -954,7 +932,7 @@ const createRouterHooks = async (ctx: any) => {
     // for manual inspection. Best-effort; never throws into the session.
     // Emits nothing model-visible, so GA-1 (no-regression) is preserved.
     // -----------------------------------------------------------------------
-    event: async ({ event }: any) => {
+    onEvent: async ({ event }: any) => {
       if (event?.type !== "session.idle") return;
       const sid = event?.properties?.sessionID;
       if (typeof sid !== "string") return;
@@ -988,8 +966,9 @@ const createRouterHooks = async (ctx: any) => {
     // -----------------------------------------------------------------------
     // Register tier agents + commands at load time
     // -----------------------------------------------------------------------
-    config: async (opencodeConfig: any) => {
-      opencodeConfig.agent ??= {};
+    getRegistrations: async () => {
+      const agents: Record<string, any> = {};
+      const commands: Record<string, any> = {};
 
       for (const [name, tier] of Object.entries(activeTiers)) {
         // Resolve prompt: per-tier override wins; otherwise fall back to the
@@ -1037,7 +1016,7 @@ const createRouterHooks = async (ctx: any) => {
           );
         }
 
-        opencodeConfig.agent[name] = agentDef;
+        agents[name] = agentDef;
       }
 
       // Repoint pre-existing subagents listed in `subagentTiers` at the active
@@ -1047,36 +1026,35 @@ const createRouterHooks = async (ctx: any) => {
       const subagentOverrides = resolveSubagentOverrides({
         subagentTiers: cfg.subagentTiers,
         tiers: activeTiers,
-        existingAgents: opencodeConfig.agent,
+        existingAgents: agents,
       });
       for (const [agentName, override] of Object.entries(subagentOverrides)) {
-        opencodeConfig.agent[agentName] = mergeSubagentOverride(
-          opencodeConfig.agent[agentName],
+        agents[agentName] = mergeSubagentOverride(
+          agents[agentName],
           override,
         );
       }
 
       // Register commands
-      opencodeConfig.command ??= {};
-      opencodeConfig.command["tiers"] = {
+      commands["tiers"] = {
         template: "",
         description: "Show model delegation tiers and rules",
       };
-      opencodeConfig.command["preset"] = {
+      commands["preset"] = {
         template: "$ARGUMENTS",
         description: "Show or switch model presets (e.g., /preset openai)",
       };
-      opencodeConfig.command["budget"] = {
+      commands["budget"] = {
         template: "$ARGUMENTS",
         description:
           "Show or switch routing mode (e.g., /budget, /budget budget, /budget quality)",
       };
-      opencodeConfig.command["bypass"] = {
+      commands["bypass"] = {
         template: "$ARGUMENTS",
         description:
           "Toggle model-router bypass (disables delegation protocol for this session)",
       };
-      opencodeConfig.command["annotate-plan"] = {
+      commands["annotate-plan"] = {
         template: [
           "Annotate the plan with tier directives for model delegation.",
           "",
@@ -1113,11 +1091,12 @@ const createRouterHooks = async (ctx: any) => {
         description:
           "Annotate a plan with [tier:fast/medium/heavy] delegation tags",
       };
-      opencodeConfig.command["router"] = {
+      commands["router"] = {
         template: "$ARGUMENTS",
         description:
           "Model-router controls (e.g., /router enforce off|advisory|enforced, /router overrides, /router models)",
       };
+      return { agents, commands };
     },
 
     // -----------------------------------------------------------------------
@@ -1126,7 +1105,7 @@ const createRouterHooks = async (ctx: any) => {
     // Subagents get confused by delegation instructions when they should
     // just execute a task (especially smaller models like Haiku).
     // -----------------------------------------------------------------------
-    "experimental.chat.system.transform": async (_input: any, output: any) => {
+    buildSystemPrompt: async (_input: any, output: any) => {
       if (bypassed) return;
       try {
         cfg = loadConfig(); // Returns cache unless invalidated
@@ -1154,7 +1133,7 @@ const createRouterHooks = async (ctx: any) => {
     // -----------------------------------------------------------------------
     // Handle /tiers, /preset, and /budget commands
     // -----------------------------------------------------------------------
-    "command.execute.before": async (input: any, output: any) => {
+    executeCommand: async (input: any, output: any) => {
       if (input.command === "tiers") {
         try {
           cfg = loadConfig();
@@ -1234,24 +1213,65 @@ const createRouterHooks = async (ctx: any) => {
 // Test-only access is grouped under an object so the OpenCode loader never
 // mistakes the hook factory for a plugin export. Tests adapt their fake client
 // once here; production passes the native V2 runtime directly below.
-const createTestRouterHooks = (testContext: any) =>
-  createRouterHooks({
-    ...(testContext.client ?? {}),
+const createTestRouterCore = (testContext: any) => {
+  const fakeClient = testContext.client ?? {};
+  const fakeSession = fakeClient.session ?? {};
+  const sessionAgents = new Map<string, string>();
+  const nativeSession = {
+    create: async (input: any) => {
+      const result = await fakeSession.create({ body: input });
+      const id = result?.id ?? result?.data?.id;
+      if (id && input?.agent) sessionAgents.set(id, input.agent);
+      return { id };
+    },
+    prompt: async (input: any) =>
+      fakeSession.prompt({
+        path: { id: input.sessionID },
+        body: {
+          ...(sessionAgents.has(input.sessionID)
+            ? { agent: sessionAgents.get(input.sessionID)?.replace(/^omr-/, "") }
+            : {}),
+          ...(input.model ? { model: input.model } : {}),
+          ...(input.system !== undefined ? { system: input.system } : {}),
+          parts: [{ type: "text", text: input.text ?? "" }],
+        },
+      }),
+    interrupt: async (input: any) => fakeSession.abort?.({ path: { id: input.sessionID } }),
+    delete: async (input: any) => fakeSession.delete?.({ path: { id: input.sessionID } }),
+  };
+  const nativeProvider = {
+    list: async () => (await fakeClient.config?.providers?.())?.data ?? [],
+  };
+  const corePromise = createRouterCore({
+    ...fakeClient,
+    session: nativeSession,
+    provider: nativeProvider,
     directory: testContext.directory,
     project: testContext.project,
     options: testContext.options,
   });
-export const testing = { createRouterHooks: createTestRouterHooks };
+  return corePromise.then((core: any) => ({
+    ...core,
+    configure: async (target: any) => {
+      const registrations = await core.getRegistrations();
+      target.agent ??= {};
+      target.command ??= {};
+      Object.assign(target.agent, registrations.agents);
+      Object.assign(target.command, registrations.commands);
+    },
+  }));
+};
+export const testing = { createRouterCore: createTestRouterCore };
 
 /**
- * Convert a V1-style agent definition (what the `config` hook builds for tier
+ * Convert an internal tier agent definition into the
  * agents) into the V2 `Agent.Info` shape served by opencode >= 2.0
  * (GET /openapi.json → components.schemas["Agent.Info"]).
  *
  * Mapping:
  *  - `model: "provider/model"` string → `Model.Ref` `{ providerID, id }`. A
  *    `#variant` suffix on the string or a top-level `variant` becomes
- *    `Model.Ref.variant`. Passing the V1 string through verbatim makes the
+ *    `Model.Ref.variant`. Passing the source string through verbatim makes the
  *    server reject the whole /api/agent response encoding ("Expected
  *    Model.Ref | undefined at data[N].model") and every agent-list call 400s.
  *  - `maxSteps` → `steps`
@@ -1260,7 +1280,7 @@ export const testing = { createRouterHooks: createTestRouterHooks };
  *    `budget_tokens`) → `request.body`
  *  - Required Agent.Info fields (`id`, `name`, `request`, `mode`, `hidden`,
  *    `permissions`) are filled in. Agent.Info is additionalProperties:false,
- *    so V1-only keys (`variant`, `maxSteps`, `prompt`, `options`) must be
+ *    so internal-only keys (`variant`, `maxSteps`, `prompt`, `options`) must be
  *    dropped rather than passed through.
  */
 function toV2AgentInfo(name: string, def: any): any {
@@ -1373,7 +1393,6 @@ function syncGlobalTierAgents(
 const V2Plugin: Plugin.Plugin = {
   id: "opencode-model-router",
   async setup(ctx2: any): Promise<(() => void) | undefined> {
-    const availableTierAgents = new Set<string>();
     const safe = async (label: string, fn: () => unknown | Promise<unknown>) => {
       try {
         await fn();
@@ -1382,98 +1401,30 @@ const V2Plugin: Plugin.Plugin = {
       }
     };
 
-    // Build the small runtime used by the pure router hook implementation from
-    // native V2 domains. No V1 plugin or V1 client API is involved.
-    const nativeRuntime = {
-      app: {
-        log: async (p: any) => {
-          try {
-            console.log(`[model-router] ${p?.body?.level ?? "info"}: ${p?.body?.message ?? ""}`);
-          } catch {}
-        },
-      },
-      config: {
-        providers: async () => {
-          try {
-            const res: any =
-              (typeof (ctx2.provider?.list === "function")
-                ? await ctx2.provider.list()
-                : null) ?? (typeof ctx2.model?.list === "function"
-                ? await ctx2.model.list()
-                : null);
-            return { data: res };
-          } catch (e) {
-            return { data: null, ...(e as object) };
-          }
-        },
-      },
-      session: {
-        create: async (a: any) => {
-          try {
-            const body = a?.body ?? {};
-            const s: any = await ctx2.session.create({
-              ...(body.parentID ? { parentID: body.parentID } : {}),
-              ...(body.agent && availableTierAgents.has(String(body.agent).replace(/^omr-/, ""))
-                ? { agent: body.agent }
-                : {}),
-              ...(body.model ? { model: body.model } : {}),
-            });
-            return { data: { id: s?.id ?? s?.sessionID ?? "" } };
-          } catch {
-            return { data: undefined };
-          }
-        },
-        prompt: async (p: any) => {
-          try {
-            const parts = p?.body?.parts ?? [];
-            const text = parts
-              .map((x: any) => (typeof x === "string" ? x : (x?.text ?? "")))
-              .join("\n");
-            return await ctx2.session.prompt({
-              sessionID: p?.path?.id,
-              text,
-            } as never);
-          } catch (e) {
-            return { error: e };
-          }
-        },
-        abort: async (p: any) => {
-          try {
-            await ctx2.session.interrupt({ sessionID: p?.path?.id });
-          } catch {}
-        },
-        delete: async (p: any) => {
-          try {
-            await (ctx2.session as any).delete?.({ sessionID: p?.path?.id });
-          } catch {}
-        },
-      },
-    };
-
-    let hooks: Record<string, any>;
+    let core: Record<string, any>;
     try {
-      hooks = (await createRouterHooks({
-        ...nativeRuntime,
+      core = (await createRouterCore({
+        ...ctx2,
         directory: ctx2.location?.directory ?? process.cwd(),
         project: ctx2.location?.project ?? {},
         options: ctx2.options,
       } as never)) as Record<string, any>;
     } catch (e) {
-      console.warn("[model-router] failed to initialise V1 core in V2 setup:", e);
+      console.warn("[model-router] failed to initialise router core in V2 setup:", e);
       return;
     }
 
-    // ---- system prompt + grader temperature (chat.params + system.transform)
+    // ---- system context: prompt injection + grader temperature --------------
     await safe("context-hook", () =>
       ctx2.session.hook("context", async (event: any) => {
         try {
           const pOut: any = { temperature: undefined };
-          await hooks["chat.params"]({ sessionID: event?.sessionID }, pOut);
+           await core.onGraderContext({ sessionID: event?.sessionID }, pOut);
           if (pOut.temperature !== undefined && event?.options) {
             event.options.temperature = pOut.temperature;
           }
           const sOut: any = { system: [] };
-          await hooks["experimental.chat.system.transform"](
+           await core.buildSystemPrompt(
             {
               sessionID: event?.sessionID,
               model: event?.model,
@@ -1481,7 +1432,7 @@ const V2Plugin: Plugin.Plugin = {
             sOut,
           );
           if (Array.isArray(event?.system) && Array.isArray(sOut.system)) {
-            // ChatParams/system-transform push string prompts in V1; V2 wants {type,text}
+            // The core emits text prompts; V2 context events use {type, text}.
             for (const s of sOut.system) {
               if (typeof s === "string") event.system.push({ type: "text" as const, text: s });
               else if (s && typeof s === "object" && typeof (s as any).text === "string") {
@@ -1493,7 +1444,7 @@ const V2Plugin: Plugin.Plugin = {
       }),
     );
 
-    // ---- subagent dispatch registration (chat.message) ---------------------
+    // ---- subagent dispatch registration -------------------------------------
     await safe("prompt-hook", () =>
       ctx2.session.hook("prompt", async (event: any) => {
         try {
@@ -1502,7 +1453,7 @@ const V2Plugin: Plugin.Plugin = {
             (event as any)?.agentName ??
             ((event as any)?.agents?.[0] ?? undefined);
           const dispatchText = event?.prompt?.text ?? "";
-          await hooks["chat.message"](
+           await core.onSessionPrompt(
             { sessionID: event?.sessionID, agent: agentName },
             {
               parts: [{ type: "text", text: dispatchText }],
@@ -1517,7 +1468,7 @@ const V2Plugin: Plugin.Plugin = {
     // ---- guard before / cap banners after ----------------------------------
     await safe("tool-hooks", () => ctx2.tool.hook("execute.before", async (event: any) => {
       try {
-        await hooks["tool.execute.before"](
+         await core.onToolBefore(
           { sessionID: event?.sessionID, tool: event?.tool, args: event?.input },
           { args: event?.input },
         );
@@ -1532,7 +1483,7 @@ const V2Plugin: Plugin.Plugin = {
           output: original,
           input: event?.input,
         };
-        await hooks["tool.execute.after"](
+        await core.onToolAfter(
           { sessionID: event?.sessionID, tool: event?.tool, args: event?.input },
           outRef,
         );
@@ -1548,10 +1499,8 @@ const V2Plugin: Plugin.Plugin = {
       }),
     );
 
-    // V2 tools are registered through the tool transform. The V1 core still
-    // owns the delegation implementation, but the public registration uses
-    // the native V2 JSON-schema/result contract.
-    const delegateTool = hooks.tool?.delegate;
+    // Register the delegate implementation through the native V2 tool contract.
+    const delegateTool = core.delegate;
     if (delegateTool && typeof ctx2.tool?.transform === "function") {
       await safe("delegate-tool", () =>
         ctx2.tool.transform((editor: any) => {
@@ -1577,49 +1526,45 @@ const V2Plugin: Plugin.Plugin = {
       );
     }
 
-    // ---- agents + commands registration (V1 `config` hook + command shim) --
-    const fakeConfig: any = { agent: {}, command: {} };
+    // ---- agents + commands registration ------------------------------------
+    let registrations: any;
     try {
-      await hooks.config(fakeConfig);
+      registrations = await core.getRegistrations();
     } catch (e) {
-      console.warn("[model-router] config registration failed:", e);
+      console.warn("[model-router] registration generation failed:", e);
+      registrations = { agents: {}, commands: {} };
     }
     const tierDefinitions = Object.fromEntries(
       ["fast", "medium", "heavy"]
-        .filter((name) => fakeConfig.agent?.[name])
-        .map((name) => [name, fakeConfig.agent[name]]),
+        .filter((name) => registrations.agents?.[name])
+        .map((name) => [name, registrations.agents[name]]),
     );
     const generatedTierAgents = syncGlobalTierAgents(
       tierDefinitions,
       (message) => console.warn(`[model-router] ${message}`),
     );
-    for (const name of generatedTierAgents) availableTierAgents.add(name);
     await safe("agent-transform", () =>
       ctx2.agent.transform(async (ed: any) => {
-        for (const [name, def] of Object.entries(fakeConfig.agent ?? {})) {
+        for (const [name, def] of Object.entries(registrations.agents ?? {})) {
           try {
             if (generatedTierAgents.has(name)) continue;
             // Agent.Info is additionalProperties:false and model must be a
-            // Model.Ref object — never hand the raw V1 def to the editor.
+            // Model.Ref object — never hand the internal tier definition directly.
             const info = toV2AgentInfo(name, def);
-            if (typeof ed.add === "function") ed.add(name, info as never);
-            else if (typeof ed.update === "function") {
-              // V2 AgentEditor.update takes a mutation callback over an
-              // existing agent; merge the converted tier def in, keeping the
-              // existing agent's request settings/headers and permissions.
-              ed.update(name, (agent: any) => {
-                if (!agent || typeof agent !== "object")
-                  throw new Error(`agent "${name}" does not exist to update`);
-                info.request = {
-                  settings: agent.request?.settings ?? {},
-                  headers: agent.request?.headers ?? {},
-                  body: { ...(agent.request?.body ?? {}), ...info.request.body },
-                };
-                if (Array.isArray(agent.permissions) && agent.permissions.length > 0)
-                  info.permissions = agent.permissions;
-                Object.assign(agent, info);
-              });
-            }
+            // V2 agent transforms update existing agents only. Router-owned
+            // tier agents are materialized as managed global files above.
+            ed.update(name, (agent: any) => {
+              if (!agent || typeof agent !== "object")
+                throw new Error(`agent "${name}" does not exist to update`);
+              info.request = {
+                settings: agent.request?.settings ?? {},
+                headers: agent.request?.headers ?? {},
+                body: { ...(agent.request?.body ?? {}), ...info.request.body },
+              };
+              if (Array.isArray(agent.permissions) && agent.permissions.length > 0)
+                info.permissions = agent.permissions;
+              Object.assign(agent, info);
+            });
           } catch (e) {
             console.warn(`[model-router] agent "${name}" registration failed:`, e);
           }
@@ -1631,7 +1576,7 @@ const V2Plugin: Plugin.Plugin = {
     }
     try {
       await ctx2.command.transform((ed: any) => {
-        for (const [name, defC] of Object.entries(fakeConfig.command ?? {}) as [string, any][]) {
+        for (const [name, defC] of Object.entries(registrations.commands ?? {}) as [string, any][]) {
           ed.add({
             name,
             description: String(defC?.description ?? ""),
@@ -1648,12 +1593,11 @@ const V2Plugin: Plugin.Plugin = {
                 } catch {}
                 return;
               }
-              // Informational commands: mirror V1 command.execute.before by
-              // routing its part-building body, then surface as a synthetic
-              // message instead of pushed user-message parts.
+              // Informational commands render their result as a V2 synthetic
+              // message rather than mutating an output.parts object.
               try {
                 const out: any = { parts: [] };
-                await hooks["command.execute.before"]({ command: name, arguments: args }, out);
+                 await core.executeCommand({ command: name, arguments: args }, out);
                 const text = (out?.parts ?? [])
                   .map((part: unknown) =>
                     typeof part === "string" ? part : (part as any)?.text ?? "",
@@ -1680,7 +1624,7 @@ const V2Plugin: Plugin.Plugin = {
       try {
         for await (const ev of ctx2.event.subscribe({ signal: controller.signal })) {
           if ((ev as any)?.type === "session.idle") {
-            void hooks.event({ event: ev });
+             void core.onEvent({ event: ev });
           }
         }
       } catch {}
@@ -1689,7 +1633,7 @@ const V2Plugin: Plugin.Plugin = {
     return () => {
       controller.abort();
       try {
-        void hooks.dispose?.();
+         void core.dispose?.();
       } catch {}
     };
   },

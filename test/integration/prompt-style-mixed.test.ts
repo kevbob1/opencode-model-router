@@ -65,12 +65,12 @@ async function withPluginHome(
 }
 
 async function registerAgents(dir: string): Promise<Record<string, AgentConfig>> {
-  const hooks = (await ModelRouterPlugin.createRouterHooks(
+  const hooks = (await ModelRouterPlugin.createRouterCore(
     makeCtx(dir),
-  )) as Awaited<ReturnType<typeof ModelRouterPlugin.createRouterHooks>>;
+  )) as Awaited<ReturnType<typeof ModelRouterPlugin.createRouterCore>>;
   const ocCfg: OpencodeConfig = {};
-  expect(hooks.config).toBeDefined();
-  await hooks.config?.(ocCfg);
+  expect(hooks.configure).toBeDefined();
+  await hooks.configure?.(ocCfg);
   return ocCfg.agent ?? {};
 }
 

@@ -6,64 +6,27 @@
  */
 
 // ============================================================================
-// 1. COMMAND REGISTRATION (in config hook)
+// 1. COMMAND REGISTRATION (native V2 command transform)
 // ============================================================================
 
-// Lines 566-606 in src/index.ts
-const modelRouterPlugin = {
-  config: async (opencodeConfig: any) => {
-    // ALWAYS initialize if missing
-    opencodeConfig.command ??= {};
-
-    // Basic command (no arguments)
-    opencodeConfig.command["tiers"] = {
-      template: "",  // Empty string = no arguments accepted
-      description: "Show model delegation tiers and rules",
-    };
-
-    // Command with arguments
-    opencodeConfig.command["preset"] = {
-      template: "$ARGUMENTS",  // $ARGUMENTS placeholder for user input
-      description: "Show or switch model presets (e.g., /preset openai)",
-    };
-
-    // Multi-line template (join array with \n)
-    opencodeConfig.command["annotate-plan"] = {
-      template: [
-        "Line 1 of instructions",
-        "Line 2 with $ARGUMENTS",
-        'File: "$ARGUMENTS"',
-      ].join("\n"),
-      description: "Annotate a plan with tier directives",
-    };
-  },
+const registerCommands = async (ctx: Plugin.Context) => {
+  await ctx.command.transform((editor) => {
+    editor.add({
+      name: "preset",
+      description: "Show or switch model presets",
+      execute: async ({ sessionID, prompt }) => {
+        await ctx.session.synthetic({ sessionID, text: `Arguments: ${prompt.text}` });
+      },
+    });
+  });
 };
 
 // ============================================================================
-// 2. COMMAND HANDLER (command.execute.before hook)
+// 2. COMMAND HANDLER (native V2 command executor)
 // ============================================================================
 
-// Lines 624-651 in src/index.ts
-const handleCommands = {
-  "command.execute.before": async (input: any, output: any) => {
-    // input.command      : string  (command name without /)
-    // input.arguments    : string | null  (raw user input after command)
-    // output.parts       : MessagePart[]  (where to write responses)
-
-    if (input.command === "preset") {
-      const args = input.arguments ?? "";  // Default to empty string
-
-      // Build response
-      const response = buildPresetOutput(cfg, args);
-
-      // Write to output
-      output.parts.push({
-        type: "text" as const,  // Always "text" for string responses
-        text: response,
-      });
-    }
-  },
-};
+// Command invocations receive `{ sessionID, prompt, delivery }`; return
+// results through `ctx.session.synthetic` when a command is informational.
 
 // ============================================================================
 // 3. ARGUMENT PARSING PATTERN
@@ -137,20 +100,18 @@ function writeState(patch: Partial<RouterState>): void {
 // 5. SYSTEM PROMPT INJECTION (every message)
 // ============================================================================
 
-// Lines 612-619 in src/index.ts
-const systemPromptInjection = {
-  "experimental.chat.system.transform": async (_input: any, output: any) => {
-    // output.system is a string[] array
+const systemPromptInjection = async (ctx: Plugin.Context) => {
+  await ctx.session.hook("context", (_event: any) => {
     try {
       cfg = loadConfig();  // Uses cache (invalidated by /preset, /budget)
     } catch {
       // Gracefully use last known config on error
     }
 
-    // Build and append system prompt content
+    // V2 context events contain structured system text parts.
     const protocolText = buildDelegationProtocol(cfg);
-    output.system.push(protocolText);  // Appends to system prompt
-  },
+    _event.system.push({ type: "text", text: protocolText });
+  });
 };
 
 // ============================================================================

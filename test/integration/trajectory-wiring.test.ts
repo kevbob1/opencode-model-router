@@ -24,20 +24,20 @@ afterEach(() => {
 
 describe("trajectory wiring (Phase 0.3, record-only)", () => {
   it("GA-1: emitted cap banner is byte-identical with trajectory wiring active", async () => {
-    const plugin: any = await ModelRouterPlugin.createRouterHooks({} as any);
+    const plugin: any = await ModelRouterPlugin.createRouterCore({} as any);
     const cfg = loadConfig();
     const tierNames = Object.keys(getActiveTiers(cfg));
     const ref = createSessionStore();
 
     const msg = { agent: "fast", sessionID: "ses_ga1" };
     const dispatch = { parts: [{ text: "do recon" }] };
-    await plugin["chat.message"](msg, dispatch);
+    await plugin.onSessionPrompt(msg, dispatch);
     ref.registerFromChatMessage(msg, dispatch, cfg, tierNames);
 
     const toolInput = { sessionID: "ses_ga1", tool: "read", args: { file_path: "a.ts" } };
     const outPlugin: any = { output: "RESULT" };
     const outRef: any = { output: "RESULT" };
-    await plugin["tool.execute.after"](toolInput, outPlugin);
+    await plugin.onToolAfter(toolInput, outPlugin);
     ref.recordToolCall(toolInput, outRef);
 
     // The plugin (with trajectory observation) must emit EXACTLY what a bare
@@ -48,27 +48,27 @@ describe("trajectory wiring (Phase 0.3, record-only)", () => {
 
   it("does NOT track or dump orchestrator (non-subagent) sessions", async () => {
     process.env.MODEL_ROUTER_TRAJECTORY_DEBUG = "1";
-    const plugin: any = await ModelRouterPlugin.createRouterHooks({} as any);
+    const plugin: any = await ModelRouterPlugin.createRouterCore({} as any);
     const sid = "ses_orchestrator";
     // No chat.message registering this as a subagent → not tracked.
     const out: any = { output: "RESULT" };
-    await plugin["tool.execute.after"]({ sessionID: sid, tool: "read", args: { file_path: "a.ts" } }, out);
-    await plugin["event"]({ event: { type: "session.idle", properties: { sessionID: sid } } });
+    await plugin.onToolAfter({ sessionID: sid, tool: "read", args: { file_path: "a.ts" } }, out);
+    await plugin.onEvent({ event: { type: "session.idle", properties: { sessionID: sid } } });
     expect(out.output).toBe("RESULT"); // untouched
     expect(() => readFileSync(trajFile(sid), "utf-8")).toThrow(); // no dump file
   });
 
   it("records a subagent trajectory and writes a gated debug dump on session.idle", async () => {
     process.env.MODEL_ROUTER_TRAJECTORY_DEBUG = "1";
-    const plugin: any = await ModelRouterPlugin.createRouterHooks({} as any);
+    const plugin: any = await ModelRouterPlugin.createRouterCore({} as any);
     const sid = "ses_traj_dump";
     rmSync(trajFile(sid), { force: true });
 
-    await plugin["chat.message"]({ agent: "fast", sessionID: sid }, { parts: [{ text: "recon" }] });
+    await plugin.onSessionPrompt({ agent: "fast", sessionID: sid }, { parts: [{ text: "recon" }] });
     // one read-only call + one producing (edit) call → tool_call_count = 2, ttfa = 2
-    await plugin["tool.execute.after"]({ sessionID: sid, tool: "read", args: { file_path: "a.ts" } }, { output: "R" });
-    await plugin["tool.execute.after"]({ sessionID: sid, tool: "edit", args: { file_path: "a.ts" } }, { output: "E" });
-    await plugin["event"]({ event: { type: "session.idle", properties: { sessionID: sid } } });
+    await plugin.onToolAfter({ sessionID: sid, tool: "read", args: { file_path: "a.ts" } }, { output: "R" });
+    await plugin.onToolAfter({ sessionID: sid, tool: "edit", args: { file_path: "a.ts" } }, { output: "E" });
+    await plugin.onEvent({ event: { type: "session.idle", properties: { sessionID: sid } } });
 
     const content = readFileSync(trajFile(sid), "utf-8");
     expect(content).toContain(`[trajectory ${sid}]`);
@@ -79,12 +79,12 @@ describe("trajectory wiring (Phase 0.3, record-only)", () => {
   });
 
   it("debug dump is a no-op when MODEL_ROUTER_TRAJECTORY_DEBUG is unset", async () => {
-    const plugin: any = await ModelRouterPlugin.createRouterHooks({} as any);
+    const plugin: any = await ModelRouterPlugin.createRouterCore({} as any);
     const sid = "ses_no_debug";
     rmSync(trajFile(sid), { force: true });
-    await plugin["chat.message"]({ agent: "fast", sessionID: sid }, { parts: [{ text: "recon" }] });
-    await plugin["tool.execute.after"]({ sessionID: sid, tool: "read", args: { file_path: "a.ts" } }, { output: "R" });
-    await plugin["event"]({ event: { type: "session.idle", properties: { sessionID: sid } } });
+    await plugin.onSessionPrompt({ agent: "fast", sessionID: sid }, { parts: [{ text: "recon" }] });
+    await plugin.onToolAfter({ sessionID: sid, tool: "read", args: { file_path: "a.ts" } }, { output: "R" });
+    await plugin.onEvent({ event: { type: "session.idle", properties: { sessionID: sid } } });
     expect(() => readFileSync(trajFile(sid), "utf-8")).toThrow(); // no file written
   });
 });

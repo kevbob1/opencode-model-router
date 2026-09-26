@@ -53,7 +53,7 @@ export interface ExecResult {
  * reads downstream as "the grader said nothing", which is not a pass.
  */
 export function extractAssistantText(res: any): string {
-  const parts: any[] = res?.data?.parts ?? [];
+  const parts: any[] = res?.parts ?? res?.data?.parts ?? [];
   return parts
     .filter((p) => p?.type === "text" && typeof p.text === "string")
     .map((p) => p.text)
@@ -90,6 +90,7 @@ export function createVerificationWiring(deps: {
   getConfig: () => RouterConfig;
 }): VerificationWiring {
   const { client, directory, getConfig } = deps;
+  const nativeSession = typeof client?.session?.interrupt === "function";
   const graderSessions = new Set<string>();
   /** Child sessions already torn down; see disposeChildSession. */
   const disposed = new Set<string>();
@@ -167,12 +168,16 @@ export function createVerificationWiring(deps: {
     }
     disposed.add(sid);
     try {
-      await client.session.abort({ path: { id: sid } });
+      await (nativeSession
+        ? client.session.interrupt({ sessionID: sid })
+        : client.session.abort({ path: { id: sid } }));
     } catch {
       // best-effort: the session may already have completed or been removed
     }
     try {
-      await client.session.delete({ path: { id: sid } });
+      await (nativeSession
+        ? client.session.delete?.({ sessionID: sid })
+        : client.session.delete({ path: { id: sid } }));
     } catch {
       // best-effort: cleanup must never break the run
     }
@@ -188,11 +193,18 @@ export function createVerificationWiring(deps: {
     // has real tools, and an unscoped session resolves every read and command
     // against the router's own cwd, so it would happily report "file not found"
     // for work that exists exactly where it was asked for.
-    const created: any = await client.session.create({
-      body: { ...(parentSessionID ? { parentID: parentSessionID } : {}) },
-      ...(req.cwd ? { query: { directory: req.cwd } } : {}),
-    });
-    const sid: string | undefined = created?.data?.id;
+    const created: any = await client.session.create(
+      nativeSession
+        ? {
+            ...(parentSessionID ? { parentID: parentSessionID } : {}),
+            ...(req.cwd ? { location: { directory: req.cwd } } : {}),
+          }
+        : {
+            body: { ...(parentSessionID ? { parentID: parentSessionID } : {}) },
+            ...(req.cwd ? { query: { directory: req.cwd } } : {}),
+          },
+    );
+    const sid: string | undefined = created?.id ?? created?.data?.id;
     if (!sid) return { sessionID: "", text: "" };
     graderSessions.add(sid);
     inFlight?.add(sid);
@@ -214,14 +226,23 @@ export function createVerificationWiring(deps: {
       // it fires while this call is still suspended, before the finally has had
       // a chance to run at all.)
       const res: any = await withTimeout(
-        client.session.prompt({
-          path: { id: sid },
-          body: {
-            ...(model ? { model } : {}),
-            system: req.system,
-            parts: [{ type: "text", text: req.prompt }],
-          },
-        }),
+        client.session.prompt(
+          nativeSession
+            ? {
+                sessionID: sid,
+                ...(model ? { model } : {}),
+                system: req.system,
+                text: req.prompt,
+              }
+            : {
+                path: { id: sid },
+                body: {
+                  ...(model ? { model } : {}),
+                  system: req.system,
+                  parts: [{ type: "text", text: req.prompt }],
+                },
+              },
+        ),
         timeoutMs(
           cfg.enforcement?.verify?.graderTimeoutMs,
           DEFAULT_GRADER_PROMPT_TIMEOUT_MS,

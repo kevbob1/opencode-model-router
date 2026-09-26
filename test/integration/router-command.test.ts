@@ -23,7 +23,7 @@ describe("router-command integration", () => {
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
     invalidateConfigCache();
-    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
+    hooks = await ModelRouterPlugin.createRouterCore({} as any);
   });
 
   afterEach(() => {
@@ -42,7 +42,7 @@ describe("router-command integration", () => {
 
   it("enforce enforced persists + reload", async () => {
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "router", arguments: "enforce enforced" }, out);
+    await hooks.executeCommand({ command: "router", arguments: "enforce enforced" }, out);
     expect(out.parts[0].text).toContain("enforced");
     expect(out.parts[0].text).toContain("persisted");
     invalidateConfigCache();
@@ -51,11 +51,11 @@ describe("router-command integration", () => {
 
   it("enforce off persists", async () => {
     // Prime to enforced first so "off" is a meaningful state transition.
-    await hooks["command.execute.before"]({ command: "router", arguments: "enforce enforced" }, { parts: [] as any[] });
+    await hooks.executeCommand({ command: "router", arguments: "enforce enforced" }, { parts: [] as any[] });
     invalidateConfigCache();
 
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "router", arguments: "enforce off" }, out);
+    await hooks.executeCommand({ command: "router", arguments: "enforce off" }, out);
     expect(out.parts[0].text).toContain("off");
     invalidateConfigCache();
     expect(resolveEnforcementMode({ config: loadConfig(), env: {} }).mode).toBe("off");
@@ -63,27 +63,27 @@ describe("router-command integration", () => {
 
   it("enforce with no mode shows current + usage", async () => {
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "router", arguments: "enforce" }, out);
+    await hooks.executeCommand({ command: "router", arguments: "enforce" }, out);
     expect(out.parts[0].text).toContain("Usage:");
     expect(out.parts[0].text).toContain("Current enforcement mode");
   });
 
   it("invalid mode shows usage", async () => {
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "router", arguments: "enforce loud" }, out);
+    await hooks.executeCommand({ command: "router", arguments: "enforce loud" }, out);
     expect(out.parts[0].text).toContain("Usage:");
   });
 
   it("bare /router shows status", async () => {
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "router", arguments: "" }, out);
+    await hooks.executeCommand({ command: "router", arguments: "" }, out);
     expect(out.parts[0].text).toContain("Enforcement:");
     expect(out.parts[0].text).toContain("/router overrides");
   });
 
   it("overrides shows both layer paths + precedence", async () => {
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "router", arguments: "overrides" }, out);
+    await hooks.executeCommand({ command: "router", arguments: "overrides" }, out);
     const text = out.parts[0].text;
     expect(text).toContain("config overrides");
     expect(text).toContain("opencode-model-router.overrides.jsonc"); // global path
@@ -108,10 +108,10 @@ describe("router-command integration", () => {
       "utf-8",
     );
     invalidateConfigCache();
-    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
+    hooks = await ModelRouterPlugin.createRouterCore({} as any);
 
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "tiers", arguments: "" }, out);
+    await hooks.executeCommand({ command: "tiers", arguments: "" }, out);
     const text = out.parts[0].text;
     expect(text).toContain("local/qwen3");
     expect(text).not.toContain("undefined");
@@ -163,7 +163,7 @@ describe("router-command — model catalog", () => {
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
     invalidateConfigCache();
-    hooks = await ModelRouterPlugin.createRouterHooks(ctx as any);
+    hooks = await ModelRouterPlugin.createRouterCore(ctx as any);
   });
 
   afterEach(() => {
@@ -176,7 +176,7 @@ describe("router-command — model catalog", () => {
 
   it("/router models lists configured providers and model ids", async () => {
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "router", arguments: "models" }, out);
+    await hooks.executeCommand({ command: "router", arguments: "models" }, out);
     const text = out.parts[0].text;
     expect(text).toContain("available models");
     expect(text).toContain("anthropic");
@@ -185,13 +185,13 @@ describe("router-command — model catalog", () => {
 
   it("/router models <provider> with no match explains what is available", async () => {
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "router", arguments: "models openai" }, out);
+    await hooks.executeCommand({ command: "router", arguments: "models openai" }, out);
     expect(out.parts[0].text).toContain("No configured provider matches");
   });
 
   it("bare /router appends model issues for the active preset", async () => {
     const out = { parts: [] as any[] };
-    await hooks["command.execute.before"]({ command: "router", arguments: "" }, out);
+    await hooks.executeCommand({ command: "router", arguments: "" }, out);
     const text = out.parts[0].text;
     expect(text).toContain("Model issues in the active preset");
     // suggests the one model the catalog does have
@@ -224,9 +224,9 @@ describe("router-command — model catalog", () => {
         },
       },
     };
-    const h: any = await ModelRouterPlugin.createRouterHooks(slow);
+    const h: any = await ModelRouterPlugin.createRouterCore(slow);
     // If the hook awaited the fetch, this never settles and the test times out.
-    await h["chat.message"]({ sessionID: "s-slow" }, { parts: [] });
+    await h.onSessionPrompt({ sessionID: "s-slow" }, { parts: [] });
     expect(calls).toBe(1);
     release({ data: { providers: [], default: {} } });
     await flush();
@@ -234,19 +234,19 @@ describe("router-command — model catalog", () => {
 
   it("emits the passive model warning on a later turn, not on turn 1", async () => {
     invalidateConfigCache();
-    const h: any = await ModelRouterPlugin.createRouterHooks(ctx as any);
+    const h: any = await ModelRouterPlugin.createRouterCore(ctx as any);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const warnings = () => warn.mock.calls.map((c) => String(c[0]));
 
       // turn 1 emits nothing at all: both the stale-model check and the
       // orphaned-pattern check need the catalog, so both are deferred
-      await h["chat.message"]({ sessionID: "s1" }, { parts: [] });
+      await h.onSessionPrompt({ sessionID: "s1" }, { parts: [] });
       expect(warnings()).toEqual([]);
 
       await flush();
 
-      await h["chat.message"]({ sessionID: "s1" }, { parts: [] });
+      await h.onSessionPrompt({ sessionID: "s1" }, { parts: [] });
       const late = warnings();
       expect(late.some((m) => m.includes("model-missing"))).toBe(true);
       // No pattern warning. This catalog serves claude-opus-4.8 against the
@@ -258,7 +258,7 @@ describe("router-command — model catalog", () => {
 
       // and it stays a one-shot: a third turn adds nothing
       const before = late.length;
-      await h["chat.message"]({ sessionID: "s1" }, { parts: [] });
+      await h.onSessionPrompt({ sessionID: "s1" }, { parts: [] });
       expect(warnings()).toHaveLength(before);
     } finally {
       warn.mockRestore();
@@ -286,12 +286,12 @@ describe("router-command — model catalog", () => {
       "utf-8",
     );
     invalidateConfigCache();
-    const h: any = await ModelRouterPlugin.createRouterHooks(ctx as any);
+    const h: any = await ModelRouterPlugin.createRouterCore(ctx as any);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      await h["chat.message"]({ sessionID: "s1" }, { parts: [] });
+      await h.onSessionPrompt({ sessionID: "s1" }, { parts: [] });
       await flush();
-      await h["chat.message"]({ sessionID: "s1" }, { parts: [] });
+      await h.onSessionPrompt({ sessionID: "s1" }, { parts: [] });
 
       const msgs = warn.mock.calls.map((c) => String(c[0]));
       expect(
@@ -329,12 +329,12 @@ describe("router-command — model catalog", () => {
         },
       },
     };
-    const h: any = await ModelRouterPlugin.createRouterHooks(flaky);
-    await h["chat.message"]({ sessionID: "s2" }, { parts: [] });
+    const h: any = await ModelRouterPlugin.createRouterCore(flaky);
+    await h.onSessionPrompt({ sessionID: "s2" }, { parts: [] });
     await flush();
 
     const out = { parts: [] as any[] };
-    await h["command.execute.before"]({ command: "router", arguments: "models" }, out);
+    await h.executeCommand({ command: "router", arguments: "models" }, out);
     expect(out.parts[0].text).toContain("anthropic/claude-haiku-4-5");
   });
 
@@ -345,9 +345,9 @@ describe("router-command — model catalog", () => {
       directory: ".",
       client: { config: { providers: async () => { throw new Error("not ready"); } } },
     };
-    const h: any = await ModelRouterPlugin.createRouterHooks(failing);
+    const h: any = await ModelRouterPlugin.createRouterCore(failing);
     const out = { parts: [] as any[] };
-    await h["command.execute.before"]({ command: "router", arguments: "models" }, out);
+    await h.executeCommand({ command: "router", arguments: "models" }, out);
     expect(out.parts[0].text).toContain("Model catalog unavailable");
   });
 });
@@ -409,12 +409,12 @@ describe("router-command — passive warnings go to opencode's log", () => {
 
   it("routes stale-model warnings to app.log and leaves the console alone", async () => {
     const logged: any[] = [];
-    const h: any = await ModelRouterPlugin.createRouterHooks(ctxWithLog(logged) as any);
+    const h: any = await ModelRouterPlugin.createRouterCore(ctxWithLog(logged) as any);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      await h["chat.message"]({ sessionID: "s1" }, { parts: [] });
+      await h.onSessionPrompt({ sessionID: "s1" }, { parts: [] });
       await flush();
-      await h["chat.message"]({ sessionID: "s1" }, { parts: [] });
+      await h.onSessionPrompt({ sessionID: "s1" }, { parts: [] });
       await flush();
 
       expect(logged.length).toBeGreaterThan(0);
@@ -463,10 +463,10 @@ describe("router-command — passive warnings go to opencode's log", () => {
     resetAgentOptionsEffortWarnings();
 
     const logged: any[] = [];
-    const h: any = await ModelRouterPlugin.createRouterHooks(ctxWithLog(logged) as any);
+    const h: any = await ModelRouterPlugin.createRouterCore(ctxWithLog(logged) as any);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      await h["config"]({});
+      await h.configure({});
       await flush();
 
       const entry = logged.find((l) =>

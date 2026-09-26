@@ -116,11 +116,11 @@ describe("Layer-3 escalation ladder wiring", () => {
       '{"pass":true,"reasons":[]}',
     ];
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "do x",
       tier: "fast",
       acceptance,
@@ -145,11 +145,11 @@ describe("Layer-3 escalation ladder wiring", () => {
       '{"pass":true,"reasons":[]}',
     ];
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "do y",
       tier: "fast",
       acceptance,
@@ -172,11 +172,11 @@ describe("Layer-3 escalation ladder wiring", () => {
       '{"pass":false,"reasons":["bad"]}',
     );
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "do z",
       tier: "fast",
       acceptance,

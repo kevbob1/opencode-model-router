@@ -116,14 +116,14 @@ describe("Mode B end-to-end (plan-annotation)", () => {
     const producerCalls: Array<{ tier: string; text: string }> = [];
     const graderQueue = ['{"pass":true,"reasons":[]}'];
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
     const acceptance =
       "[acceptance]\ncriteria: task A is correct\n[/acceptance]";
 
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "task A from the plan",
       tier: "fast",
       acceptance,
@@ -146,14 +146,14 @@ describe("Mode B end-to-end (plan-annotation)", () => {
       '{"pass":true,"reasons":[]}',
     ];
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
     const acceptance =
       "[acceptance]\ncriteria: task B is correct\n[/acceptance]";
 
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "task B from the plan",
       tier: "fast",
       acceptance,

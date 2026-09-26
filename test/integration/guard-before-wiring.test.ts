@@ -25,10 +25,10 @@ describe("guard-before-wiring integration", () => {
     process.env.USERPROFILE = dir;
     delete process.env.MODEL_ROUTER_ENFORCE;
     invalidateConfigCache();
-    hooks = await ModelRouterPlugin.createRouterHooks({} as any);
+    hooks = await ModelRouterPlugin.createRouterCore({} as any);
     // Register "SUB" as a subagent session by passing agent:"fast"
     // which matches the "fast" tier key in the default anthropic preset.
-    await hooks["chat.message"]({ sessionID: "SUB", agent: "fast" }, { parts: [] });
+    await hooks.onSessionPrompt({ sessionID: "SUB", agent: "fast" }, { parts: [] });
   });
 
   afterEach(() => {
@@ -53,7 +53,7 @@ describe("guard-before-wiring integration", () => {
   it("(a) ENFORCED: self-script bash command is hard-blocked", async () => {
     process.env.MODEL_ROUTER_ENFORCE = "1";
     await expect(
-      hooks["tool.execute.before"](
+      hooks.onToolBefore(
         { sessionID: "SUB", tool: "bash", callID: "c1" },
         { args: { command: 'node -e "console.log(1)"' } },
       ),
@@ -64,7 +64,7 @@ describe("guard-before-wiring integration", () => {
   it("(b) ENFORCED: orchestrator session is not guarded", async () => {
     process.env.MODEL_ROUTER_ENFORCE = "1";
     await expect(
-      hooks["tool.execute.before"](
+      hooks.onToolBefore(
         { sessionID: "ORCH", tool: "bash", callID: "c2" },
         { args: { command: 'node -e "console.log(1)"' } },
       ),
@@ -78,7 +78,7 @@ describe("guard-before-wiring integration", () => {
 
     // before-hook must not throw even for a self-script
     await expect(
-      hooks["tool.execute.before"](
+      hooks.onToolBefore(
         { sessionID: "SUB", tool: "bash", callID: "c3" },
         { args: { command: 'node -e "console.log(1)"' } },
       ),
@@ -86,7 +86,7 @@ describe("guard-before-wiring integration", () => {
 
     // after-hook must not inject "GUARD:" advisory text
     const out = { output: "ORIGINAL" };
-    await hooks["tool.execute.after"](
+    await hooks.onToolAfter(
       { sessionID: "SUB", tool: "read", args: { file_path: "a.ts" }, callID: "c4" },
       out,
     );
@@ -100,21 +100,21 @@ describe("guard-before-wiring integration", () => {
 
     // First read — must be allowed
     await expect(
-      hooks["tool.execute.before"](
+      hooks.onToolBefore(
         { sessionID: "SUB", tool: "read", callID: "r1" },
         { args: { file_path: "a.ts" } },
       ),
     ).resolves.toBeUndefined();
 
     // Simulate execution: after-hook records the read into guard state
-    await hooks["tool.execute.after"](
+    await hooks.onToolAfter(
       { sessionID: "SUB", tool: "read", args: { file_path: "a.ts" }, callID: "r1" },
       { output: "file contents" },
     );
 
     // Second identical read — must be blocked
     await expect(
-      hooks["tool.execute.before"](
+      hooks.onToolBefore(
         { sessionID: "SUB", tool: "read", callID: "r2" },
         { args: { file_path: "a.ts" } },
       ),

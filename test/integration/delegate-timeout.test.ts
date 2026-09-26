@@ -163,11 +163,11 @@ describe("delegate time-boxes (fake timers)", () => {
 
   it("cuts off a producer prompt that never resolves and still returns", async () => {
     const rec = newRecorder();
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, { producer: () => never() }) as any,
     );
 
-    const pending: Promise<string> = hooks.tool.delegate.execute({
+    const pending: Promise<string> = hooks.delegate.execute({
       task: "do x",
       tier: "heavy",
       acceptance: ACCEPTANCE,
@@ -187,7 +187,7 @@ describe("delegate time-boxes (fake timers)", () => {
 
   it("does not cut off a producer that resolves just under the ceiling", async () => {
     const rec = newRecorder();
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, {
         producer: () =>
           new Promise((resolve) =>
@@ -199,7 +199,7 @@ describe("delegate time-boxes (fake timers)", () => {
       }) as any,
     );
 
-    const pending: Promise<string> = hooks.tool.delegate.execute({
+    const pending: Promise<string> = hooks.delegate.execute({
       task: "do x",
       tier: "fast",
       acceptance: ACCEPTANCE,
@@ -216,11 +216,11 @@ describe("delegate time-boxes (fake timers)", () => {
   it("honours a custom delegateTimeoutMs from config", async () => {
     writeOverrides(dir, { delegateTimeoutMs: 5000 });
     const rec = newRecorder();
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, { producer: () => never() }) as any,
     );
 
-    const pending: Promise<string> = hooks.tool.delegate.execute({
+    const pending: Promise<string> = hooks.delegate.execute({
       task: "do x",
       tier: "fast",
       acceptance: ACCEPTANCE,
@@ -236,11 +236,11 @@ describe("delegate time-boxes (fake timers)", () => {
 
   it("disposes a timed-out producer session exactly once", async () => {
     const rec = newRecorder();
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, { producer: () => never() }) as any,
     );
 
-    const pending: Promise<string> = hooks.tool.delegate.execute({
+    const pending: Promise<string> = hooks.delegate.execute({
       task: "do x",
       tier: "heavy",
       acceptance: ACCEPTANCE,
@@ -262,7 +262,7 @@ describe("delegate time-boxes (fake timers)", () => {
     const rec = newRecorder();
     // Every attempt but the last produces normally and fails grading; the last
     // one hangs. The ladder must still terminate with an honest verdict.
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, {
         producer: (attempt) =>
           attempt >= 3 ? never() : Promise.resolve(textReply("partial work")),
@@ -270,7 +270,7 @@ describe("delegate time-boxes (fake timers)", () => {
       }) as any,
     );
 
-    const pending: Promise<string> = hooks.tool.delegate.execute({
+    const pending: Promise<string> = hooks.delegate.execute({
       task: "do x",
       tier: "fast",
       acceptance: ACCEPTANCE,
@@ -285,12 +285,12 @@ describe("delegate time-boxes (fake timers)", () => {
 
   it("never aborts the parent orchestrator session", async () => {
     const rec = newRecorder();
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, { producer: () => never() }) as any,
     );
 
     const parentSessionID = "orchestrator-session";
-    const pending: Promise<string> = hooks.tool.delegate.execute(
+    const pending: Promise<string> = hooks.delegate.execute(
       { task: "do x", tier: "fast", acceptance: ACCEPTANCE },
       { sessionID: parentSessionID },
     );
@@ -309,14 +309,14 @@ describe("delegate time-boxes (fake timers)", () => {
 
   it("cuts off a grader that never resolves and returns an honest unmet", async () => {
     const rec = newRecorder();
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, {
         producer: () => Promise.resolve(textReply("producer output")),
         grader: () => never(),
       }) as any,
     );
 
-    const pending: Promise<string> = hooks.tool.delegate.execute({
+    const pending: Promise<string> = hooks.delegate.execute({
       task: "do x",
       tier: "fast",
       acceptance: ACCEPTANCE,
@@ -333,14 +333,14 @@ describe("delegate time-boxes (fake timers)", () => {
 
   it("disposes a timed-out grader session exactly once", async () => {
     const rec = newRecorder();
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, {
         producer: () => Promise.resolve(textReply("producer output")),
         grader: () => never(),
       }) as any,
     );
 
-    const pending: Promise<string> = hooks.tool.delegate.execute({
+    const pending: Promise<string> = hooks.delegate.execute({
       task: "do x",
       tier: "fast",
       acceptance: ACCEPTANCE,
@@ -357,14 +357,14 @@ describe("delegate time-boxes (fake timers)", () => {
   it("honours a custom graderTimeoutMs from config", async () => {
     writeOverrides(dir, { graderTimeoutMs: 1000, gateBudgetMs: 900000 });
     const rec = newRecorder();
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, {
         producer: () => Promise.resolve(textReply("producer output")),
         grader: () => never(),
       }) as any,
     );
 
-    const pending: Promise<string> = hooks.tool.delegate.execute({
+    const pending: Promise<string> = hooks.delegate.execute({
       task: "do x",
       tier: "fast",
       acceptance: ACCEPTANCE,
@@ -394,7 +394,7 @@ describe("delegate time-boxes (fake timers)", () => {
     // which is inside B's own 2000ms gate budget but AFTER A's budget has
     // already expired — the exact overlap where a wiring-global abort would
     // take B down with A.
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, {
         producer: () => Promise.resolve(textReply("producer output")),
         // Call 2 is B's. Every other call belongs to A (which retries) and hangs.
@@ -408,7 +408,7 @@ describe("delegate time-boxes (fake timers)", () => {
     );
 
     // t=0: A starts. Its gate budget expires at t=2000.
-    const a: Promise<string> = hooks.tool.delegate.execute({
+    const a: Promise<string> = hooks.delegate.execute({
       task: "task A",
       tier: "fast",
       acceptance: ACCEPTANCE,
@@ -416,7 +416,7 @@ describe("delegate time-boxes (fake timers)", () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     // t=1000: B starts. Its gate expires at t=3000; its grader answers at 2500.
-    const b: Promise<string> = hooks.tool.delegate.execute({
+    const b: Promise<string> = hooks.delegate.execute({
       task: "task B",
       tier: "fast",
       acceptance: ACCEPTANCE,
@@ -444,14 +444,14 @@ describe("delegate time-boxes (fake timers)", () => {
   it("returns an honest unmet when the whole gate exceeds its budget", async () => {
     writeOverrides(dir, { gateBudgetMs: 2000, graderTimeoutMs: 600000 });
     const rec = newRecorder();
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtx(dir, rec, {
         producer: () => Promise.resolve(textReply("producer output")),
         grader: () => never(),
       }) as any,
     );
 
-    const pending: Promise<string> = hooks.tool.delegate.execute({
+    const pending: Promise<string> = hooks.delegate.execute({
       task: "do x",
       tier: "fast",
       acceptance: ACCEPTANCE,

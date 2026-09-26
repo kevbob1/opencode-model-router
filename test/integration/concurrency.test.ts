@@ -15,12 +15,12 @@ describe("concurrency isolation", () => {
   // Defined at describe scope — captures the `hooks` let-binding by reference,
   // so each test invocation uses whichever hooks was set by beforeEach.
   const callBefore = (sid: string, tool: string, args: any) =>
-    hooks["tool.execute.before"]({ tool, sessionID: sid, callID: "c" }, { args });
+    hooks.onToolBefore({ tool, sessionID: sid, callID: "c" }, { args });
 
   // Simulate completed execution so the after-hook updates consecutiveNonProducing.
   // Required for read_budget: the counter is only incremented via tool.execute.after.
   const callAfter = (sid: string, tool: string, args: any) =>
-    hooks["tool.execute.after"]({ tool, sessionID: sid, args, callID: "c" }, { output: "" });
+    hooks.onToolAfter({ tool, sessionID: sid, args, callID: "c" }, { output: "" });
 
   beforeEach(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "mlc-"));
@@ -41,15 +41,15 @@ describe("concurrency isolation", () => {
         },
       },
     };
-    hooks = await ModelRouterPlugin.createRouterHooks(ctx as any);
+    hooks = await ModelRouterPlugin.createRouterCore(ctx as any);
 
     // Register two subagent sessions with NON-trivial dispatch text so the
     // guard is fully enforced (no trivial-bypass for either session).
-    await hooks["chat.message"](
+    await hooks.onSessionPrompt(
       { sessionID: "CC_A", agent: "fast" },
       { parts: [{ type: "text", text: "analyze the module deeply" }] },
     );
-    await hooks["chat.message"](
+    await hooks.onSessionPrompt(
       { sessionID: "CC_B", agent: "fast" },
       { parts: [{ type: "text", text: "inspect the other module deeply" }] },
     );

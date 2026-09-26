@@ -118,11 +118,11 @@ describe("Mode A end-to-end enforcement loop", () => {
       '{"pass":true,"reasons":[]}',
     ];
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "implement the feature",
       tier: "fast",
     });
@@ -143,11 +143,11 @@ describe("Mode A end-to-end enforcement loop", () => {
     const producerCalls: Array<{ tier: string; text: string }> = [];
     const graderQueue = ['{"pass":true,"reasons":[]}'];
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, producerCalls, graderQueue) as any,
     );
 
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "implement the feature",
       tier: "fast",
     });
@@ -165,11 +165,11 @@ describe("Mode A end-to-end enforcement loop", () => {
     const producerCalls: Array<{ tier: string; text: string }> = [];
     const graderQueue = Array(6).fill('{"pass":false,"reasons":["bad"]}');
 
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, producerCalls, graderQueue, undefined, "") as any,
     );
 
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "implement the feature",
       tier: "fast",
     });
@@ -186,14 +186,14 @@ describe("Mode A end-to-end enforcement loop", () => {
 
   it("Mode A proportional GA-6: trivial fast Option(i) task NOT verified (grader uncalled, output unchanged)", async () => {
     const counters = { grader: 0 };
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, [], [], counters) as any,
     );
 
     process.env.MODEL_ROUTER_ENFORCE = "1";
     invalidateConfigCache();
 
-    await hooks["chat.message"](
+    await hooks.onSessionPrompt(
       { sessionID: "CHILD_T4", agent: "fast" },
       { parts: [{ type: "text", text: "grep for the thing" }] },
     );
@@ -203,7 +203,7 @@ describe("Mode A end-to-end enforcement loop", () => {
       metadata: { sessionId: "CHILD_T4" },
     };
 
-    await hooks["tool.execute.after"](
+    await hooks.onToolAfter(
       {
         tool: "task",
         sessionID: "ORCH_T4",
@@ -222,7 +222,7 @@ describe("Mode A end-to-end enforcement loop", () => {
   // notes on legitimate research delegations.
   it("Mode A: non-trivial read-only research task is NOT verified (no forcing note, grader uncalled)", async () => {
     const counters = { grader: 0 };
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxWithQueues(dir, [], [], counters) as any,
     );
 
@@ -236,7 +236,7 @@ describe("Mode A end-to-end enforcement loop", () => {
       "<task_result>Findings: the auth flow issues JWTs from service X.</task_result>";
     const out: any = { output: findings, metadata: { sessionId: "CHILD_RO" } };
 
-    await hooks["tool.execute.after"](
+    await hooks.onToolAfter(
       {
         tool: "task",
         sessionID: "ORCH_RO",

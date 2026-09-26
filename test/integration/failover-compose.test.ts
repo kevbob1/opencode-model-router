@@ -131,7 +131,7 @@ describe("Phase 3.3 — provider-failover / quality-escalation orthogonality", (
     };
 
     process.env.MODEL_ROUTER_ENFORCE = "1";
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxCustom(dir, promptHandler) as any,
     );
 
@@ -142,7 +142,7 @@ describe("Phase 3.3 — provider-failover / quality-escalation orthogonality", (
     // producer output, which the grader prompt embeds verbatim.
     const acceptance =
       "[acceptance]\ncriteria: the task output is satisfactory\n[/acceptance]";
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "produce something good",
       acceptance,
       tier: "fast",
@@ -229,7 +229,7 @@ describe("Phase 3.3 — provider-failover / quality-escalation orthogonality", (
     };
 
     process.env.MODEL_ROUTER_ENFORCE = "1";
-    const hooks: any = await ModelRouterPlugin.createRouterHooks(
+    const hooks: any = await ModelRouterPlugin.createRouterCore(
       makeCtxCustom(dir, promptHandler) as any,
     );
 
@@ -238,7 +238,7 @@ describe("Phase 3.3 — provider-failover / quality-escalation orthogonality", (
     // what the producer actually returned.
     const acceptance =
       "[acceptance]\ncriteria: the task output is satisfactory\n[/acceptance]";
-    const result: string = await hooks.tool.delegate.execute({
+    const result: string = await hooks.delegate.execute({
       task: "produce something",
       acceptance,
       tier: "fast",
