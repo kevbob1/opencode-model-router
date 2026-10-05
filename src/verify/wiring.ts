@@ -74,6 +74,7 @@ import {
 } from "./dispatch";
 import { runArgv, runShell } from "./exec";
 import { snapshotTree } from "./tree";
+import { rejectsTemperature } from "./temperature";
 import { captureReference, DEFAULT_CAPTURE_TIMEOUT_MS, gcStaleReferences, nodeReferenceFs, type DispatchReference } from "./reference";
 import type { PluginLogger } from "../router/logger";
 import { REFERENCE_NONE } from "./baseline";
@@ -866,6 +867,8 @@ export interface VerificationWiring {
   ): Promise<PreparedVerification>;
   /** Session ids currently running a grader prompt, so hooks can skip them. */
   graderSessions: Set<string>;
+  /** Grader sessions retrying one explicitly rejected temperature option. */
+  graderTemperatureOmissions: Set<string>;
   /** Stop a plugin-created child; v1 deletes it, a host runner owns v2 cleanup. Never throws. */
   disposeChildSession(sid: string): Promise<void>;
   /** Run one grader turn, parented to the caller's session when given. */
@@ -952,6 +955,7 @@ export function createVerificationWiring(deps: {
   const { client, directory, getConfig } = deps;
   const logger: WiringLogger = deps.logger ?? { warn: (message, extra) => console.warn(message, extra ?? "") };
   const graderSessions = new Set<string>();
+  const graderTemperatureOmissions = new Set<string>();
   /** Child sessions already torn down; see disposeChildSession. */
   const disposed = new Set<string>();
   const mutex = createMutexRegistry();
@@ -1178,8 +1182,10 @@ export function createVerificationWiring(deps: {
       const controller = new AbortController();
       let sid: string | undefined;
       try {
-        return await withTimeout(deps.childRunner.run({
+        const run = (retry = false) => withTimeout(deps.childRunner!.run({
           parentSessionID,
+          ...(retry && sid ? { sessionID: sid } : {}),
+          ...(retry ? { omitTemperature: true } : {}),
           cwd: req.cwd,
           model: tierModel(cfg, req.tier) ?? undefined,
           system: req.system,
@@ -1191,6 +1197,17 @@ export function createVerificationWiring(deps: {
             inFlight?.add(sessionID);
           },
         }), graderTimeoutMs(req.tier, cfg.enforcement?.verify?.graderTimeoutMs), "grader prompt");
+        try {
+          return await run();
+        } catch (error) {
+          if (!sid || !rejectsTemperature(error)) throw error;
+          graderTemperatureOmissions.add(sid);
+          try {
+            return await run(true);
+          } finally {
+            graderTemperatureOmissions.delete(sid);
+          }
+        }
       } finally {
         controller.abort();
         if (sid) {
@@ -1216,6 +1233,25 @@ export function createVerificationWiring(deps: {
     try {
       const cfg = getConfig();
       const model = tierModel(cfg, req.tier) ?? undefined;
+      const promptRequest = {
+        path: { id: sid },
+        body: {
+          ...(model ? { model } : {}),
+          system: req.system,
+          parts: [{ type: "text", text: req.prompt }],
+        },
+      };
+      const run = () => withTimeout(
+        (async () => {
+          const res = await client.session.prompt(promptRequest);
+          // The compatible SDK resolves HTTP failures and assistant provider errors.
+          const error = res?.error ?? res?.data?.info?.error;
+          if (error !== undefined) throw error;
+          return res;
+        })(),
+        graderTimeoutMs(req.tier, cfg.enforcement?.verify?.graderTimeoutMs),
+        "grader prompt",
+      );
       // Time-boxed for the same reason as the producer prompt, but with a
       // sharper edge: a grader that never answers must not be able to hold the
       // gate open. The RouterTimeoutError is deliberately allowed to propagate
@@ -1229,18 +1265,18 @@ export function createVerificationWiring(deps: {
       // (The gate-budget path in index.ts does issue a raw abort, deliberately:
       // it fires while this call is still suspended, before the finally has had
       // a chance to run at all.)
-      const res: any = await withTimeout(
-        client.session.prompt({
-          path: { id: sid },
-          body: {
-            ...(model ? { model } : {}),
-            system: req.system,
-            parts: [{ type: "text", text: req.prompt }],
-          },
-        }),
-        graderTimeoutMs(req.tier, cfg.enforcement?.verify?.graderTimeoutMs),
-        "grader prompt",
-      );
+      let res: any;
+      try {
+        res = await run();
+      } catch (error) {
+        if (!rejectsTemperature(error)) throw error;
+        graderTemperatureOmissions.add(sid);
+        try {
+          res = await run();
+        } finally {
+          graderTemperatureOmissions.delete(sid);
+        }
+      }
       return { sessionID: sid, text: extractAssistantText(res) };
     } finally {
       graderSessions.delete(sid);
@@ -2122,6 +2158,7 @@ export function createVerificationWiring(deps: {
       return { ...change, reference };
     },
     graderSessions,
+    graderTemperatureOmissions,
     disposeChildSession,
     dispatchGrader,
     buildGateDeps,

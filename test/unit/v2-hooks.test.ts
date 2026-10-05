@@ -136,6 +136,29 @@ describe("OpenCode 2 hook adapter", () => {
     expect(event.input).toEqual({ agent: "fast", description: "Read files", sessionID: "previous", prompt: "[router] Read files", background: false });
   });
 
+  it("applies scoped retry recovery after protocol lowering using only Model.Ref", async () => {
+    const f = fixture();
+    const replacement = new Request("https://provider.example/chat", { method: "POST", body: '{"model":"m"}' });
+    const runtime = {
+      withToolContext: (_: any, run: any) => run(), applyChildSystem: vi.fn(),
+      applyChildRequest: vi.fn(async (_sessionID: string, _request: Request) => replacement),
+      applyChildWebSocket: vi.fn((_sessionID: string, _frame: string) => "retry frame"),
+    };
+    await f.start({}, runtime);
+    const original = new Request("https://provider.example/chat", { method: "POST", body: '{"model":"m","temperature":0}' });
+    const model = Object.freeze({ providerID: "p", id: "m", variant: "high" });
+    const event = { ...call, model, kind: "primary", request: original };
+    await f.sessionHooks["http.request"](event);
+    expect(runtime.applyChildRequest).toHaveBeenCalledWith("child", original);
+    expect(event.request).toBe(replacement);
+    expect(await original.json()).toMatchObject({ temperature: 0 });
+    expect(model).toEqual({ providerID: "p", id: "m", variant: "high" });
+    const socket = { ...call, model, kind: "primary", frame: "original frame" };
+    await f.sessionHooks["experimental.ws.send"](socket);
+    expect(runtime.applyChildWebSocket).toHaveBeenCalledWith("child", "original frame");
+    expect(socket.frame).toBe("retry frame");
+  });
+
   it("propagates enforcement blocks instead of executing a denied native tool", async () => {
     const f = fixture();
     await f.start({ "tool.execute.before": async () => { throw new Error("read budget exceeded"); } });

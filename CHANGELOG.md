@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anti-narration warnings as synthetic transcript entries. See
   [the compatibility notes](docs/OPENCODE_V2.md).
 
+### Fixed
+
+- Retry verification graders once without temperature when a provider explicitly
+  rejects that option. Compatible and v2 subagent requests keep their model and
+  session identity; invalid values and unrelated failures do not trigger recovery.
+
 ## [1.15.0] - 2026-09-28
 
 The acceptance gate no longer runs a test suite per delegation. `testsPass` now runs only

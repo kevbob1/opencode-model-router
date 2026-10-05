@@ -361,7 +361,7 @@ const ModelRouterPlugin: Plugin = async (ctx: RouterPluginInput) => {
   const logger = createPluginLogger(ctx.client);
 
   const {
-    graderSessions, dispatchGrader, buildGateDeps, disposeChildSession,
+    graderSessions, graderTemperatureOmissions, dispatchGrader, buildGateDeps, disposeChildSession,
     prepareVerification, startReferenceGc,
     sweepVerification, disposeVerification,
     startDispatch, takeDispatch, isDeferred: wiringIsDeferred, finishDeferred, applyLineage, pending,
@@ -978,6 +978,10 @@ const ModelRouterPlugin: Plugin = async (ctx: RouterPluginInput) => {
     "chat.params": async (input: any, output: any) => {
       try {
         if (input?.sessionID && graderSessions.has(input.sessionID)) {
+          if (graderTemperatureOmissions.has(input.sessionID)) {
+            delete output.temperature;
+            return;
+          }
           const graderTemperature = cfg.enforcement?.verify?.graderTemperature;
           if (graderTemperature !== undefined) {
             output.temperature = graderTemperature;

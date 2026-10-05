@@ -78,7 +78,7 @@ function translateAdded(before: string, after: string): string {
 export async function registerV2Hooks(
   ctx: Context,
   hooks: Hooks,
-  runtime?: Pick<V2Runtime, "withToolContext" | "applyChildSystem"> & Partial<Pick<V2Runtime, "dispose" | "forgetSession">>,
+  runtime?: Pick<V2Runtime, "withToolContext" | "applyChildSystem"> & Partial<Pick<V2Runtime, "dispose" | "forgetSession" | "applyChildRequest" | "applyChildWebSocket">>,
 ): Promise<() => Promise<void>> {
   // The old plugin surface uses separate mutable input/output bags. Keep those
   // casts confined to this adapter, rather than weakening the v2 event types.
@@ -245,6 +245,13 @@ export async function registerV2Hooks(
           }
         }
       }
+    }));
+
+    if (runtime?.applyChildRequest) registrations.push(await ctx.session.hook("http.request", async (event) => {
+      event.request = await runtime.applyChildRequest!(event.sessionID, event.request);
+    }));
+    if (runtime?.applyChildWebSocket) registrations.push(await ctx.session.hook("experimental.ws.send", (event) => {
+      event.frame = runtime.applyChildWebSocket!(event.sessionID, event.frame);
     }));
 
     registrations.push(await ctx.tool.hook("execute.before", async (event) => {

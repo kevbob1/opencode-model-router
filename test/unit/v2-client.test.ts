@@ -257,6 +257,76 @@ describe("native v2 child runner", () => {
     await wiring.disposeVerification();
   });
 
+  it.each([
+    [{ temperature: 0 }, {}],
+    [{ generationConfig: { temperature: 0, maxOutputTokens: 100 } }, { generationConfig: { maxOutputTokens: 100 } }],
+    [{ inferenceConfig: { temperature: 0, maxTokens: 100 } }, { inferenceConfig: { maxTokens: 100 } }],
+  ])("resumes the same grader child without a rejected temperature (%j)", async (settings, expected) => {
+    const { runtime, context, toolContext, execute } = fixture();
+    const cfg: RouterConfig = {
+      activePreset: "p",
+      presets: { p: { medium: { model: "p/model", description: "", whenToUse: [] } } },
+      rules: [],
+      defaultTier: "medium",
+      enforcement: { verify: { graderTemperature: 0 } },
+    };
+    const rejection = Object.assign(new Error("temperature is not supported"), { status: 400 });
+    execute.mockImplementationOnce(async (_input, childContext) => {
+      await childContext.progress({ sessionID: "child", status: "running" });
+      const first = new Request("https://provider.example/chat", { method: "POST", body: '{"temperature":0}' });
+      expect(await runtime.applyChildRequest("child", first)).toBe(first);
+      throw rejection;
+    });
+    execute.mockImplementationOnce(async (input, childContext) => {
+      expect(input).toMatchObject({ sessionID: "child", prompt: "inspect", model: "p/model", background: false });
+      // Context hooks receive Model.Ref and empty overrides, not resolved defaults.
+      // A final HTTP hook must remove the agent/model's inherited temperature too.
+      const inherited = new Request("https://provider.example/chat", {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Test": "preserved", "Content-Length": "99" },
+        body: JSON.stringify({ model: "model", ...settings, messages: [{ role: "user", content: "inspect" }] }),
+      });
+      const retry = await runtime.applyChildRequest("child", inherited);
+      expect(await retry.clone().json()).toEqual({ model: "model", ...expected, messages: [{ role: "user", content: "inspect" }] });
+      expect(retry.headers.get("x-test")).toBe("preserved");
+      expect(retry.headers.has("content-length")).toBe(false);
+      expect(await inherited.json()).toMatchObject(settings);
+      const destination = fixture();
+      destination.context.location.directory = "/moved";
+      const moved = new Request("https://provider.example/chat", { method: "POST", body: '{"temperature":0}' });
+      expect(await (await destination.runtime.applyChildRequest("child", moved)).json()).toEqual({});
+      // Unloading another location must not clear this dispatch's active retry.
+      await destination.runtime.dispose();
+      expect(await (await runtime.applyChildRequest("child", moved)).json()).toEqual({});
+      const frame = JSON.stringify({ type: "response.create", response: { temperature: 0, model: "model", input: [] } });
+      expect(JSON.parse(runtime.applyChildWebSocket("child", frame))).toEqual({ type: "response.create", response: { model: "model", input: [] } });
+      expect(runtime.applyChildWebSocket("other", frame)).toBe(frame);
+      expect(runtime.applyChildWebSocket("child", "not json")).toBe("not json");
+      const unrelated = new Request("https://provider.example/chat", { method: "POST", body: '{"temperature":0.7}' });
+      expect(await runtime.applyChildRequest("other", unrelated)).toBe(unrelated);
+      await childContext.progress({ sessionID: "child", status: "running" });
+      return { output: { sessionID: "child", status: "completed", output: "verified result" } };
+    });
+    const wiring = createVerificationWiring({
+      client: runtime.client,
+      childRunner: runtime.childRunner,
+      directory: "/project",
+      getConfig: () => cfg,
+    });
+
+    await expect(runtime.withToolContext(toolContext, () => wiring.dispatchGrader({
+      tier: "medium", system: "Judge the changes", prompt: "inspect",
+    }, "parent"))).resolves.toEqual({ sessionID: "child", text: "verified result" });
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls[1]?.[0]).toMatchObject({ sessionID: "child" });
+    expect(wiring.graderSessions.size).toBe(0);
+    const subsequent = new Request("https://provider.example/chat", { method: "POST", body: '{"temperature":0.7}' });
+    expect(await runtime.applyChildRequest("child", subsequent)).toBe(subsequent);
+    const frame = '{"type":"response.create","response":{"temperature":0.7}}';
+    expect(runtime.applyChildWebSocket("child", frame)).toBe(frame);
+    expect(context.session.interrupt).toHaveBeenCalledWith({ sessionID: "child" }, undefined);
+  });
+
   it("drives the shared verified-delegate path through native producer and grader children", async () => {
     const { runtime, context, toolContext, execute } = fixture();
     const cfg: RouterConfig = {
