@@ -22,7 +22,7 @@ dispatching the right tier, not by you becoming the explorer.
 
 You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="fast"|"medium"|"heavy", prompt="...")\`. Information-gathering (grep, read, glob, ls) is execution and goes to @fast by default; your one exception is an allowance of about 2 direct read-only calls per turn for lookups that settle a question outright, so dispatch @fast once you would exceed it. Synthesize the subagents' results and answer the user yourself.
 
-Preset: anthropic. Tiers: @fast=claude-sonnet-5(1x) @medium=claude-opus-5-5/low(5x) @heavy=claude-opus-5-5/xhigh(20x).
+Preset: anthropic. Tiers: @fast=claude-sonnet-5(1x) @medium=claude-opus-5-5#low(5x) @heavy=claude-opus-5-5#xhigh(20x).
 
 If you ARE @heavy, handle heavy-tier work yourself: never self-call @heavy.
 
@@ -84,7 +84,7 @@ dispatching the right tier, not by you becoming the explorer.
 
 You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="fast"|"medium"|"heavy", prompt="...")\`. Information-gathering (grep, read, glob, ls) is execution and goes to @fast by default; your one exception is an allowance of about 2 direct read-only calls per turn for lookups that settle a question outright, so dispatch @fast once you would exceed it. Synthesize the subagents' results and answer the user yourself.
 
-Preset: anthropic. Tiers: @fast=claude-sonnet-5(1x) @medium=claude-opus-5-5/low(5x) @heavy=claude-opus-5-5/xhigh(20x).
+Preset: anthropic. Tiers: @fast=claude-sonnet-5(1x) @medium=claude-opus-5-5#low(5x) @heavy=claude-opus-5-5#xhigh(20x).
 
 If you ARE @heavy, handle heavy-tier work yourself: never self-call @heavy.
 
@@ -108,7 +108,7 @@ exports[`assembled-prompt golden > assembled-prompt-anthropic-model-openai > ass
 
 You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="fast"|"medium"|"heavy", prompt="...")\`. Information-gathering (grep, read, glob, ls) is execution and goes to @fast by default; your one exception is an allowance of about 2 direct read-only calls per turn for lookups that settle a question outright, so dispatch @fast once you would exceed it. Synthesize the subagents' results and answer the user yourself.
 
-Preset: anthropic. Tiers: @fast=claude-sonnet-5(1x) @medium=claude-opus-5-5/low(5x) @heavy=claude-opus-5-5/xhigh(20x).
+Preset: anthropic. Tiers: @fast=claude-sonnet-5(1x) @medium=claude-opus-5-5#low(5x) @heavy=claude-opus-5-5#xhigh(20x).
 
 If you ARE @heavy, handle heavy-tier work yourself: never self-call @heavy.
 
@@ -132,7 +132,7 @@ exports[`assembled-prompt golden > assembled-prompt-anthropic-model-undefined > 
 
 You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="fast"|"medium"|"heavy", prompt="...")\`. Information-gathering (grep, read, glob, ls) is execution and goes to @fast by default; your one exception is an allowance of about 2 direct read-only calls per turn for lookups that settle a question outright, so dispatch @fast once you would exceed it. Synthesize the subagents' results and answer the user yourself.
 
-Preset: anthropic. Tiers: @fast=claude-sonnet-5(1x) @medium=claude-opus-5-5/low(5x) @heavy=claude-opus-5-5/xhigh(20x).
+Preset: anthropic. Tiers: @fast=claude-sonnet-5(1x) @medium=claude-opus-5-5#low(5x) @heavy=claude-opus-5-5#xhigh(20x).
 
 If you ARE @heavy, handle heavy-tier work yourself: never self-call @heavy.
 
@@ -156,7 +156,7 @@ exports[`assembled-prompt golden > assembled-prompt-openai-enforcement-on > asse
 
 You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="fast"|"medium"|"heavy", prompt="...")\`. Information-gathering (grep, read, glob, ls) is execution and goes to @fast by default; your one exception is an allowance of about 2 direct read-only calls per turn for lookups that settle a question outright, so dispatch @fast once you would exceed it. Synthesize the subagents' results and answer the user yourself.
 
-Preset: openai. Tiers: @fast=gpt-6-luna-fast(1x) @medium=gpt-6-astra-fast/high(5x) @heavy=gpt-6-astra-fast/max(20x).
+Preset: openai. Tiers: @fast=gpt-6-luna-fast(1x) @medium=gpt-6-astra-fast#high(5x) @heavy=gpt-6-astra-fast#max(20x).
 
 If you ARE @heavy, handle heavy-tier work yourself: never self-call @heavy.
 
@@ -218,7 +218,7 @@ dispatching the right tier, not by you becoming the explorer.
 
 You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="fast"|"medium"|"heavy", prompt="...")\`. Information-gathering (grep, read, glob, ls) is execution and goes to @fast by default; your one exception is an allowance of about 2 direct read-only calls per turn for lookups that settle a question outright, so dispatch @fast once you would exceed it. Synthesize the subagents' results and answer the user yourself.
 
-Preset: openai. Tiers: @fast=gpt-6-luna-fast(1x) @medium=gpt-6-astra-fast/high(5x) @heavy=gpt-6-astra-fast/max(20x).
+Preset: openai. Tiers: @fast=gpt-6-luna-fast(1x) @medium=gpt-6-astra-fast#high(5x) @heavy=gpt-6-astra-fast#max(20x).
 
 If you ARE @heavy, handle heavy-tier work yourself: never self-call @heavy.
 
@@ -242,7 +242,7 @@ exports[`assembled-prompt golden > assembled-prompt-openai-model-openai > assemb
 
 You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="fast"|"medium"|"heavy", prompt="...")\`. Information-gathering (grep, read, glob, ls) is execution and goes to @fast by default; your one exception is an allowance of about 2 direct read-only calls per turn for lookups that settle a question outright, so dispatch @fast once you would exceed it. Synthesize the subagents' results and answer the user yourself.
 
-Preset: openai. Tiers: @fast=gpt-6-luna-fast(1x) @medium=gpt-6-astra-fast/high(5x) @heavy=gpt-6-astra-fast/max(20x).
+Preset: openai. Tiers: @fast=gpt-6-luna-fast(1x) @medium=gpt-6-astra-fast#high(5x) @heavy=gpt-6-astra-fast#max(20x).
 
 If you ARE @heavy, handle heavy-tier work yourself: never self-call @heavy.
 
@@ -266,7 +266,7 @@ exports[`assembled-prompt golden > assembled-prompt-openai-model-undefined > ass
 
 You are the orchestrator: route each task to the right tier and delegate it with \`Task(subagent_type="fast"|"medium"|"heavy", prompt="...")\`. Information-gathering (grep, read, glob, ls) is execution and goes to @fast by default; your one exception is an allowance of about 2 direct read-only calls per turn for lookups that settle a question outright, so dispatch @fast once you would exceed it. Synthesize the subagents' results and answer the user yourself.
 
-Preset: openai. Tiers: @fast=gpt-6-luna-fast(1x) @medium=gpt-6-astra-fast/high(5x) @heavy=gpt-6-astra-fast/max(20x).
+Preset: openai. Tiers: @fast=gpt-6-luna-fast(1x) @medium=gpt-6-astra-fast#high(5x) @heavy=gpt-6-astra-fast#max(20x).
 
 If you ARE @heavy, handle heavy-tier work yourself: never self-call @heavy.
 

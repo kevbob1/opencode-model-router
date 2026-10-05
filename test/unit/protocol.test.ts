@@ -129,7 +129,7 @@ describe("buildDelegationProtocol", () => {
   });
   it("renders rich config with variant, costRatio, mode suffix and overrideRules", () => {
     const out = buildDelegationProtocol(rich);
-    expect(out).toContain("@medium=claude-sonnet-4-6/max(5x)");
+    expect(out).toContain("@medium=claude-sonnet-4-6#max(5x)");
     expect(out).toContain("mode:budget");
     expect(out).toContain("1.o1 2.o2"); // overrideRules win
     expect(out).toContain("R:"); // taxonomy present

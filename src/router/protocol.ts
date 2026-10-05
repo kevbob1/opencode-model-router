@@ -87,11 +87,11 @@ export function buildDecomposeHint(cfg: RouterConfig): string {
 export function buildDelegationProtocol(cfg: RouterConfig): string {
   const tiers = getActiveTiers(cfg);
 
-  // Compact tier summary: @name=model/variant(costRatio)
+  // Compact tier summary: @name=model#variant(costRatio)
   const tierLine = Object.entries(tiers)
     .map(([name, t]) => {
       const short = t.model.split("/").pop() ?? t.model;
-      const v = t.variant ? `/${t.variant}` : "";
+      const v = t.variant ? `#${t.variant}` : "";
       const c = t.costRatio != null ? `(${t.costRatio}x)` : "";
       return `@${name}=${short}${v}${c}`;
     })
